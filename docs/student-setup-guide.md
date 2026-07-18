@@ -2,13 +2,13 @@
 
 ## Data Pipelines Workshop — 2026
 
-The goal is to make sure that you can run Python code, work with Git, and launch Linux containers with Docker.
+We will complete this setup **together during the first class**. You are not expected to install the course tools in advance. The goal of the session is to make sure that you can run Python code, work with Git, and launch Linux containers with Docker.
 
-If a verification command does not work, take a screenshot of the full terminal output and bring it to class.
+Bring the computer you plan to use during the course, its charger, and the credentials or administrator access required to install software. If your computer is managed by an employer or another organization, make sure you are allowed to install the required tools.
 
 ## 1. What you need
 
-Install the following tools:
+During the first class, we will install the following tools:
 
 1. **Git** — source control and course repository access.
 2. **Visual Studio Code** — the recommended code editor.
@@ -22,7 +22,7 @@ You will also need:
 - Permission to install software on your computer.
 - Hardware virtualization enabled. This is especially important on Windows.
 
-> Kubernetes is part of the course, but you do not need to install a separate Kubernetes environment before the first class. We will enable or install the required tools later.
+> Kubernetes is part of the course, but we will not install a separate Kubernetes environment during the initial setup session. We will enable or install the required tools later.
 
 ## 2. Install Git
 
@@ -189,7 +189,7 @@ docker run --rm python:3.12-slim python -c "print('Container setup OK')"
 
 The command should print `Container setup OK`.
 
-## 7. Final readiness check
+## 7. End-of-class readiness check
 
 Run the following commands in a new terminal:
 
@@ -207,7 +207,7 @@ python3 --version
 
 On Windows, use `python --version` or `py --version` instead.
 
-You are ready for the course when all of the following are true:
+By the end of the first class, all of the following should be true:
 
 - [ ] Git prints a version number.
 - [ ] VS Code opens and the Microsoft Python extension is installed.
@@ -243,7 +243,7 @@ Use Command Prompt with `.venv\Scripts\activate.bat`, or ask the course staff fo
 
 ## 9. What not to install yet
 
-Unless the course staff asks you to do so, you do not need to install these tools before the first class:
+Unless the course staff asks you to do so, do not install these tools during the initial setup session:
 
 - A local database server.
 - Kubernetes, Minikube, or Kind.

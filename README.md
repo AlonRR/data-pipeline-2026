@@ -16,4 +16,4 @@ Course materials will be added here during the semester.
 
 ## Student preparation
 
-Before the first class, complete the [Student Setup Guide](docs/student-setup-guide.md).
+During the first class, we will complete the [Student Setup Guide](docs/student-setup-guide.md) together.
