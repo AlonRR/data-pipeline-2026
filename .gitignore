@@ -24,3 +24,8 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Instructor-private planning notes
+COURSE_FLOW.md
+COURSE_PRE_PLAN.md
+poc/
