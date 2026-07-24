@@ -23,3 +23,7 @@ publishing to the queue.
 ## TO DO
 1. change the time to be timestamp
 2. itarate on first 5 pages
+
+
+## Deadline
+31.7 before class
