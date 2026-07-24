@@ -29,3 +29,6 @@ logs/
 COURSE_FLOW.md
 COURSE_PRE_PLAN.md
 poc/
+
+**/venv/
+**/__pycache__/
