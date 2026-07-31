@@ -258,6 +258,7 @@ class Config:
     link_suffixes: tuple[str, ...] | None
     user_name: str | None = None
     password: str | None = None
+    crawler_type: str = "http"
 
 
 def load_config() -> Config:
@@ -277,19 +278,34 @@ def load_config() -> Config:
         link_suffixes=suffixes or None,
         user_name=os.environ.get("CRAWLER_USERNAME"),
         password=os.environ.get("CRAWLER_PASSWORD"),
+        crawler_type=os.environ.get("CRAWLER_TYPE", "http"),
     )
 
 
-def run(config: Config | None = None) -> list[str]:
-    """Instantiate the concrete crawler for the configured source and run once."""
-    # Imported lazily so this base module stays free of concrete-crawler imports.
-    from http_index_crawler import HttpIndexCrawler
+def make_crawler(config: Config) -> Crawler:
+    """Instantiate the concrete crawler selected by ``config.crawler_type``.
 
+    Concrete crawlers are imported lazily so this base module stays free of
+    concrete-crawler imports.
+    """
+    ctype = (config.crawler_type or "http").lower()
+    if ctype == "wolt":
+        from concrete_crawlers.wolt import WoltCrawler
+
+        return WoltCrawler(config)
+    if ctype in ("http", "http_index"):
+        from http_index_crawler import HttpIndexCrawler
+
+        return HttpIndexCrawler(config)
+    raise RuntimeError(f"unknown CRAWLER_TYPE: {config.crawler_type!r}")
+
+
+def run(config: Config | None = None) -> list[str]:
+    """Run one crawl cycle for the configured source."""
     cfg = config or load_config()
     if not cfg.source_url:
         raise RuntimeError("CRAWLER_SOURCE_URL is not set")
-    crawler = HttpIndexCrawler(cfg)  # swap per source as concrete crawlers are added
-    return crawler.run()
+    return make_crawler(cfg).run()
 
 
 if __name__ == "__main__":
