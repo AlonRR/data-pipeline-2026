@@ -1,7 +1,7 @@
-"""Container entrypoint: run the crawler on the CRON_SCHEDULE.
+"""Container entrypoint: run every registered crawler on the CRON_SCHEDULE.
 
-Runs one crawl immediately on startup (so we don't wait for the first cron
-tick), then hands off to a blocking scheduler for subsequent runs.
+Runs one crawl cycle immediately on startup (so we don't wait for the first
+cron tick), then hands off to a blocking scheduler for subsequent runs.
 """
 import logging
 import os
@@ -9,7 +9,7 @@ import os
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-import crawler
+import orchestrator
 
 log = logging.getLogger("salim.crawler.scheduler")
 
@@ -22,12 +22,12 @@ def main() -> None:
     schedule = os.environ.get("CRON_SCHEDULE", "0 */6 * * *")
 
     scheduler = BlockingScheduler(timezone="UTC")
-    scheduler.add_job(crawler.run, CronTrigger.from_crontab(schedule))
+    scheduler.add_job(orchestrator.run, CronTrigger.from_crontab(schedule))
     log.info("crawler scheduled: '%s' (UTC)", schedule)
 
     # Kick off one run on startup instead of waiting for the first tick.
     try:
-        crawler.run()
+        orchestrator.run()
     except Exception:
         log.exception("initial crawl failed")
 

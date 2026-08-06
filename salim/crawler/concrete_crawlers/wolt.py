@@ -35,6 +35,8 @@ WOLT_INDEX_URL = "https://wm-gateway.wolt.com/isr-prices/public/v1/index.html"
 class WoltCrawler(Crawler):
     """Fetch Wolt Market (IL) grocery price files and upload the new ones."""
 
+    name = "wolt"
+
     _DAY_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")       # YYYY-MM-DD in a day link
     _TS_RE = re.compile(r"(\d{8})-(\d{6})\.gz$")            # -YYYYMMDD-HHMMSS.gz in a file
 

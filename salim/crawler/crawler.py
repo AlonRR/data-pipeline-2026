@@ -1,4 +1,4 @@
-"""Salim crawler — abstract base + shared pipeline.
+"""Salim crawler — abstract base + shared single-source pipeline.
 
 A concrete crawler exists per source (e.g. per supermarket chain). Each source
 differs in how you log in, how the index page looks, and how dates are encoded,
@@ -16,9 +16,11 @@ Everything shared lives on the base class ``Crawler``::
         Uploader.upload(Downloader.download([link]))
     Cacher.save(newest)                    # advance the mark AFTER success
 
-Only the newest date is cached — not the page. All connection details come from
-environment variables (see ``.env.example``), so the same code runs against
-local MinIO or production Supabase Storage with only ``.env`` changing.
+Only the newest date is cached — not the page.
+
+This module only knows how to run ONE source, given its ``Config``. The
+registry of which sources exist, and running all of them together, lives in
+``orchestrator.py``.
 """
 from __future__ import annotations
 
@@ -186,10 +188,59 @@ class Cacher:
 
 
 # --------------------------------------------------------------------------- #
+# Configuration — one Config per crawler instance.
+# --------------------------------------------------------------------------- #
+@dataclass
+class Config:
+    source_url: str
+    bucket: str
+    s3_endpoint: str | None
+    s3_access_key: str | None
+    s3_secret_key: str | None
+    s3_region: str | None
+    cache_path: Path
+    download_dir: Path
+    link_suffixes: tuple[str, ...] | None
+    user_name: str | None = None
+    password: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Shared infra config — where files land, not what to fetch. The per-source
+# half of Config (url/credentials) is filled in by the orchestrator.
+# --------------------------------------------------------------------------- #
+@dataclass
+class InfraConfig:
+    bucket: str
+    s3_endpoint: str | None
+    s3_access_key: str | None
+    s3_secret_key: str | None
+    s3_region: str | None
+    cache_dir: Path
+    download_dir: Path
+
+
+def load_infra_config() -> InfraConfig:
+    """Build the shared infra settings from environment variables (see .env.example)."""
+    tmp = Path(tempfile.gettempdir()) / "salim-crawler"
+    return InfraConfig(
+        bucket=os.environ.get("S3_BUCKET", "raw-prices"),
+        s3_endpoint=os.environ.get("S3_ENDPOINT_URL"),
+        s3_access_key=os.environ.get("S3_ACCESS_KEY"),
+        s3_secret_key=os.environ.get("S3_SECRET_KEY"),
+        s3_region=os.environ.get("S3_REGION"),
+        cache_dir=Path(os.environ.get("CACHE_DIR", tmp / "cache")),
+        download_dir=Path(os.environ.get("DOWNLOAD_DIR", tmp / "downloads")),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Crawler — abstract base. Subclass per source; implement fetch + new_links.
 # --------------------------------------------------------------------------- #
 class Crawler(ABC):
     """Shared crawl pipeline. Subclasses implement the two source-specific steps."""
+
+    name: str  # unique; must match this crawler's key in orchestrator.CRAWLER_CONFIGS
 
     def __init__(self, config: Config):
         self.config = config
@@ -240,77 +291,3 @@ class Crawler(ABC):
         self._cacher.save(newest_date)
         log.info("crawl complete: %d file(s) uploaded; newest date %s", len(keys), newest_date)
         return keys
-
-
-# --------------------------------------------------------------------------- #
-# Configuration & entry point
-# --------------------------------------------------------------------------- #
-@dataclass
-class Config:
-    source_url: str
-    bucket: str
-    s3_endpoint: str | None
-    s3_access_key: str | None
-    s3_secret_key: str | None
-    s3_region: str | None
-    cache_path: Path
-    download_dir: Path
-    link_suffixes: tuple[str, ...] | None
-    user_name: str | None = None
-    password: str | None = None
-    crawler_type: str = "http"
-
-
-def load_config() -> Config:
-    """Build a Config from environment variables (see .env.example)."""
-    tmp = Path(tempfile.gettempdir())
-    raw_suffixes = os.environ.get("CRAWLER_LINK_SUFFIXES", "")
-    suffixes = tuple(s.strip().lower() for s in raw_suffixes.split(",") if s.strip())
-    return Config(
-        source_url=os.environ.get("CRAWLER_SOURCE_URL", ""),
-        bucket=os.environ.get("S3_BUCKET", "raw-prices"),
-        s3_endpoint=os.environ.get("S3_ENDPOINT_URL"),
-        s3_access_key=os.environ.get("S3_ACCESS_KEY"),
-        s3_secret_key=os.environ.get("S3_SECRET_KEY"),
-        s3_region=os.environ.get("S3_REGION"),
-        cache_path=Path(os.environ.get("CACHE_PATH", tmp / "salim-crawler" / "last_date.txt")),
-        download_dir=Path(os.environ.get("DOWNLOAD_DIR", tmp / "salim-crawler" / "downloads")),
-        link_suffixes=suffixes or None,
-        user_name=os.environ.get("CRAWLER_USERNAME"),
-        password=os.environ.get("CRAWLER_PASSWORD"),
-        crawler_type=os.environ.get("CRAWLER_TYPE", "http"),
-    )
-
-
-def make_crawler(config: Config) -> Crawler:
-    """Instantiate the concrete crawler selected by ``config.crawler_type``.
-
-    Concrete crawlers are imported lazily so this base module stays free of
-    concrete-crawler imports.
-    """
-    ctype = (config.crawler_type or "http").lower()
-    if ctype == "wolt":
-        from concrete_crawlers.wolt import WoltCrawler
-
-        return WoltCrawler(config)
-    if ctype in ("http", "http_index"):
-        from http_index_crawler import HttpIndexCrawler
-
-        return HttpIndexCrawler(config)
-    raise RuntimeError(f"unknown CRAWLER_TYPE: {config.crawler_type!r}")
-
-
-def run(config: Config | None = None) -> list[str]:
-    """Run one crawl cycle for the configured source."""
-    cfg = config or load_config()
-    if not cfg.source_url:
-        raise RuntimeError("CRAWLER_SOURCE_URL is not set")
-    return make_crawler(cfg).run()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    run()
