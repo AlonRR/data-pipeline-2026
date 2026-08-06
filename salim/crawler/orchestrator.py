@@ -4,6 +4,7 @@ import logging
 import os
 
 from crawler import Config, Crawler, InfraConfig, load_infra_config
+from concrete_crawlers.rami_levi import RamiLeviCrawler
 from concrete_crawlers.yohananof import YohananofCrawler
 
 log = logging.getLogger("salim.crawler.orchestrator")
@@ -13,6 +14,7 @@ log = logging.getLogger("salim.crawler.orchestrator")
 # add its settings to CRAWLER_CONFIGS keyed by the same name as its `.name`.
 CRAWLERS: list[type[Crawler]] = [
     YohananofCrawler,
+    RamiLeviCrawler,
 ]
 
 # crawler name -> source-specific settings, merged with the shared
@@ -23,6 +25,11 @@ CRAWLER_CONFIGS: dict[str, dict] = {
     "yohananof": {
         "source_url": "https://url.publishedprices.co.il/login",
         "user_name": "yohananof",
+        "password": "",
+    },
+    "rami_levi": {
+        "source_url": "https://url.publishedprices.co.il/login",
+        "user_name": "RamiLevi",
         "password": "",
     },
 }
