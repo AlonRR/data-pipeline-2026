@@ -4,6 +4,7 @@ import logging
 import os
 
 from crawler import Config, Crawler, InfraConfig, load_infra_config
+from concrete_crawlers.shufersal import ShufersalCrawler
 from concrete_crawlers.yohananof import YohananofCrawler
 from concrete_crawlers.wolt import WoltCrawler
 
@@ -14,6 +15,7 @@ log = logging.getLogger("salim.crawler.orchestrator")
 # add its settings to CRAWLER_CONFIGS keyed by the same name as its `.name`.
 CRAWLERS: list[type[Crawler]] = [
     YohananofCrawler,
+    ShufersalCrawler,
     WoltCrawler,
 ]
 
@@ -25,6 +27,11 @@ CRAWLER_CONFIGS: dict[str, dict] = {
     "yohananof": {
         "source_url": "https://url.publishedprices.co.il/login",
         "user_name": "yohananof",
+        "password": "",
+    },
+    "shufersal": {
+        "source_url": "https://prices.shufersal.co.il/",
+        "user_name": None,  # public listing, no login
         "password": "",
     },
     # Wolt Market publishes a public HTML price index (no auth).
