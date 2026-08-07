@@ -7,6 +7,7 @@ from crawler import Config, Crawler, InfraConfig, load_infra_config
 from concrete_crawlers.shufersal import ShufersalCrawler
 from concrete_crawlers.yohananof import YohananofCrawler
 from concrete_crawlers.wolt import WoltCrawler
+from concrete_crawlers.hazi_hinam import HaziHinamCrawler
 
 log = logging.getLogger("salim.crawler.orchestrator")
 
@@ -15,6 +16,7 @@ log = logging.getLogger("salim.crawler.orchestrator")
 # add its settings to CRAWLER_CONFIGS keyed by the same name as its `.name`.
 CRAWLERS: list[type[Crawler]] = [
     YohananofCrawler,
+    HaziHinamCrawler,
     ShufersalCrawler,
     WoltCrawler,
 ]
@@ -37,6 +39,9 @@ CRAWLER_CONFIGS: dict[str, dict] = {
     # Wolt Market publishes a public HTML price index (no auth).
     "wolt": {
         "source_url": "https://wm-gateway.wolt.com/isr-prices/public/v1/index.html",
+    },
+    "hazi_hinam": {
+        "source_url": "https://shop.hazi-hinam.co.il/Prices",
     },
 }
 
