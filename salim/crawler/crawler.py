@@ -192,6 +192,7 @@ class Cacher:
 # --------------------------------------------------------------------------- #
 @dataclass
 class Config:
+    name: str
     source_url: str
     bucket: str
     s3_endpoint: str | None
@@ -240,10 +241,11 @@ def load_infra_config() -> InfraConfig:
 class Crawler(ABC):
     """Shared crawl pipeline. Subclasses implement the two source-specific steps."""
 
-    name: str  # unique; must match this crawler's key in orchestrator.CRAWLER_CONFIGS
+    name: str
 
     def __init__(self, config: Config):
         self.config = config
+        self.name = config.name
         self._downloader = Downloader(config.download_dir)
         self._uploader = Uploader(
             config.bucket,

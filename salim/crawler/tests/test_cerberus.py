@@ -25,8 +25,8 @@ class _DummyS3Client:
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(client=lambda *args, **kwargs: _DummyS3Client()))
 
+from concrete_crawlers.cerberus import CerberusCrawler
 from crawler import Config
-from concrete_crawlers.rami_levi import RamiLeviCrawler
 
 
 class _FakeResponse:
@@ -60,20 +60,21 @@ class _FakeSession:
         return self._post_responses.pop(0)
 
 
-class RamiLeviCrawlerTests(unittest.TestCase):
-    def _config(self) -> Config:
+class CerberusCrawlerTests(unittest.TestCase):
+    def _config(self, *, name: str = "rami_levi", user_name: str = "RamiLevi") -> Config:
         tmpdir = Path(tempfile.mkdtemp())
         return Config(
+            name=name,
             source_url="https://url.publishedprices.co.il/login",
             bucket="raw-prices",
             s3_endpoint=None,
             s3_access_key=None,
             s3_secret_key=None,
             s3_region=None,
-            cache_path=tmpdir / "rami_levi.txt",
-            download_dir=tmpdir / "downloads",
+            cache_path=tmpdir / f"{name}.txt",
+            download_dir=tmpdir / name,
             link_suffixes=None,
-            user_name="RamiLevi",
+            user_name=user_name,
             password="",
         )
 
@@ -98,15 +99,12 @@ class RamiLeviCrawlerTests(unittest.TestCase):
                 ),
             ],
         )
-        crawler = RamiLeviCrawler(self._config())
+        crawler = CerberusCrawler(self._config())
 
         with patch("concrete_crawlers.cerberus.requests.Session", return_value=session):
             links, newest = crawler.fetch()
 
-        self.assertEqual(
-            session.post_calls[0]["data"]["username"],
-            "RamiLevi",
-        )
+        self.assertEqual(session.post_calls[0]["data"]["username"], "RamiLevi")
         self.assertEqual(
             links,
             [
@@ -118,7 +116,7 @@ class RamiLeviCrawlerTests(unittest.TestCase):
         self.assertIs(crawler._downloader.session, session)
 
     def test_new_links_returns_only_files_newer_than_checkpoint(self):
-        crawler = RamiLeviCrawler(self._config())
+        crawler = CerberusCrawler(self._config())
         links = [
             "https://url.publishedprices.co.il/file/d/PriceFull7290058140886-001-20260805-010203.gz",
             "https://url.publishedprices.co.il/file/d/PromoFull7290058140886-001-20260806-121314.gz",
@@ -131,6 +129,14 @@ class RamiLeviCrawlerTests(unittest.TestCase):
             fresh,
             ["https://url.publishedprices.co.il/file/d/PromoFull7290058140886-001-20260806-121314.gz"],
         )
+
+    def test_config_name_sets_instance_identity_for_logs_and_paths(self):
+        crawler = CerberusCrawler(self._config(name="yohananof", user_name="yohananof"))
+
+        self.assertEqual(crawler.name, "yohananof")
+        self.assertEqual(crawler._log.name, "salim.crawler.yohananof")
+        self.assertTrue(str(crawler.config.cache_path).endswith("yohananof.txt"))
+        self.assertTrue(str(crawler.config.download_dir).endswith("yohananof"))
 
 
 if __name__ == "__main__":
