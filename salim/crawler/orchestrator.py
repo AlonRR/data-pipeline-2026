@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
 import os
@@ -8,6 +8,7 @@ from concrete_crawlers.shufersal import ShufersalCrawler
 from concrete_crawlers.yohananof import YohananofCrawler
 from concrete_crawlers.wolt import WoltCrawler
 from concrete_crawlers.hazi_hinam import HaziHinamCrawler
+from concrete_crawlers.victory import VictoryCrawler
 
 log = logging.getLogger("salim.crawler.orchestrator")
 
@@ -19,6 +20,7 @@ CRAWLERS: list[type[Crawler]] = [
     HaziHinamCrawler,
     ShufersalCrawler,
     WoltCrawler,
+    VictoryCrawler,
 ]
 
 # crawler name -> source-specific settings, merged with the shared
@@ -42,6 +44,9 @@ CRAWLER_CONFIGS: dict[str, dict] = {
     },
     "hazi_hinam": {
         "source_url": "https://shop.hazi-hinam.co.il/Prices",
+    },
+    "victory": {
+        "source_url": "https://laibcatalog.co.il/victory/index.html",
     },
 }
 
@@ -90,3 +95,4 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     run()
+
