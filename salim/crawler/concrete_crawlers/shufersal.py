@@ -157,8 +157,10 @@ class ShufersalCrawler(Crawler):
         first = self._page_html(cat_id, 1)
         total = self._page_count(first)
         self._record_page(cat_id, 1, first)
+        log.info("catID=%d: indexing page 1/%d", cat_id, total)
         for page in range(2, total + 1):
             self._record_page(cat_id, page, self._page_html(cat_id, page))
+            log.info("catID=%d: indexing page %d/%d", cat_id, page, total)
         log.info("catID=%d: indexed %d page(s)", cat_id, total)
 
     def _refresh_link(self, name: str, force: bool = False) -> str:

@@ -60,7 +60,6 @@ def _build_config(name: str, settings: dict, infra: InfraConfig) -> Config:
         s3_access_key=infra.s3_access_key,
         s3_secret_key=infra.s3_secret_key,
         s3_region=infra.s3_region,
-        cache_path=infra.cache_dir / f"{name}.txt",
         download_dir=infra.download_dir / name,
         link_suffixes=settings.get("link_suffixes"),
         user_name=settings.get("user_name"),
