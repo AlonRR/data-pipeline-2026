@@ -3,6 +3,8 @@
 Fetches supermarket price publications, pipes them through a queue, and
 serves the normalized data over an API.
 
+[מאגר מחירי סופרים ממשלתי](https://www.gov.il/he/pages/cpfta_prices_regulations)
+
 ## Architecture
 
 ```
