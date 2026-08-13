@@ -17,13 +17,14 @@ side.
 Field names in the output records (``superProvider``, ``itemDescription``,
 ``unitQuantity``, ``weighted``, ``inPackage``, ``lastSaleDateTime``, ...)
 match the JSON schema in issue #24 exactly, not the source XML tag names --
-the latter were verified against real files in ``tests/fixtures/prices/``
-(Shufersal 7290027600007, chain 7290058249350, Wolt 7290700100008) and drift
-between chains more than you'd guess: ``ManufactureName``/``ManufactureItemDescription``
-(no "r"), ``PriceUpdateTime`` (not ...Date), and one chain spells
-``bIsWeighted`` as ``blsWeighted``. ``LastSaleDateTime`` is present in most
-fixtures but entirely absent from chain 7290058249350's -- ``_text()``
-returns ``None`` for a missing tag, so that's handled, not a bug.
+the latter were checked by hand against real downloads from eight chains
+(Shufersal, Wolt, Hazi Hinam, Rami Levi, Tiv Taam, SuperPharm, Victory, and
+two different Yohananof schema eras) and drift between chains more than
+you'd guess: ``ManufactureName``/``ManufactureItemDescription`` (no "r"),
+``PriceUpdateTime`` (not ...Date), and Wolt spells ``bIsWeighted`` as
+``blsWeighted``. ``LastSaleDateTime`` is present for most chains but
+entirely absent from Wolt's -- ``_text()`` returns ``None`` for a missing
+tag, so that's handled, not a bug.
 
 Not wired into any trigger yet -- no queue consumer, no scheduler. This is
 just a library (plus a small CLI for ad-hoc use) to be called once the
@@ -84,10 +85,10 @@ def _bool(raw: str | None) -> bool | None:
     return raw.strip() in ("1", "true", "True")
 
 
-# Chain 7290058249350's fixture spells this tag "blsWeighted" (lowercase L,
-# lowercase s) instead of the "bIsWeighted" every other observed chain uses --
-# a genuine source-side typo, not a casing difference our case-insensitive
-# _text() would catch, so it needs to be listed as a distinct alias.
+# Wolt's real files spell this tag "blsWeighted" (lowercase L, lowercase s)
+# instead of the "bIsWeighted" every other observed chain uses -- a genuine
+# source-side typo, not a casing difference our case-insensitive _text()
+# would catch, so it needs to be listed as a distinct alias.
 _WEIGHTED_TAGS = ("bIsWeighted", "blsWeighted")
 
 
@@ -124,8 +125,8 @@ def _item_record(item: ET.Element, super_provider: str | None, store_id: str | N
         "allowDiscount": _bool(_text(item, "AllowDiscount")),
         "itemStatus": _text(item, "ItemStatus"),
         "updateTime": _timestamp(_text(item, "PriceUpdateTime", "PriceUpdateDate")),
-        # Some chains (observed: 7290058249350) omit this tag altogether --
-        # _text() already returns None for a missing tag, so that's fine.
+        # Wolt's files omit this tag altogether -- _text() already returns
+        # None for a missing tag, so that's fine, not a bug.
         "lastSaleDateTime": _timestamp(_text(item, "LastSaleDateTime", "LastSaleDate")),
     }
 
