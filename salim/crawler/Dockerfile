@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 COPY concrete_crawlers ./concrete_crawlers
 
-CMD ["python", "scheduler.py"]
+CMD ["python", "orchestrator.py"]

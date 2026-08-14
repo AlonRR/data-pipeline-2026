@@ -6,6 +6,11 @@ from dataclasses import dataclass
 
 from crawler import Config, Crawler, InfraConfig, load_infra_config
 from concrete_crawlers.cerberus import CerberusCrawler
+from concrete_crawlers.hazi_hinam import HaziHinamCrawler
+from concrete_crawlers.shufersal import ShufersalCrawler
+from concrete_crawlers.super_pharm import SuperPharmCrawler
+from concrete_crawlers.victory import VictoryCrawler
+from concrete_crawlers.wolt import WoltCrawler
 
 log = logging.getLogger("salim.crawler.orchestrator")
 
@@ -18,9 +23,14 @@ class CrawlerRegistration:
 
 # To add a new chain: add a registration below and add its settings to
 # CRAWLER_CONFIGS keyed by the same registration name.
-CRAWLERS: list[CrawlerRegistration] = [
+CRAWLERS: list[CrawlerRegistration | type[Crawler]] = [
     CrawlerRegistration(name="yohananof", crawler_cls=CerberusCrawler),
     CrawlerRegistration(name="rami_levi", crawler_cls=CerberusCrawler),
+    HaziHinamCrawler,
+    ShufersalCrawler,
+    WoltCrawler,
+    VictoryCrawler,
+    SuperPharmCrawler,
 ]
 
 # crawler name -> source-specific settings, merged with the shared
@@ -38,6 +48,24 @@ CRAWLER_CONFIGS: dict[str, dict] = {
         "user_name": "RamiLevi",
         "password": "",
     },
+    "shufersal": {
+        "source_url": "https://prices.shufersal.co.il/",
+        "user_name": None,  # public listing, no login
+        "password": "",
+    },
+    # Wolt Market publishes a public HTML price index (no auth).
+    "wolt": {
+        "source_url": "https://wm-gateway.wolt.com/isr-prices/public/v1/index.html",
+    },
+    "hazi_hinam": {
+        "source_url": "https://shop.hazi-hinam.co.il/Prices",
+    },
+    "victory": {
+        "source_url": "https://laibcatalog.co.il/victory/index.html",
+    },
+    "super_pharm": {
+        "source_url": "http://prices.super-pharm.co.il/",
+    },
 }
 
 
@@ -51,7 +79,6 @@ def _build_config(name: str, settings: dict, infra: InfraConfig) -> Config:
         s3_access_key=infra.s3_access_key,
         s3_secret_key=infra.s3_secret_key,
         s3_region=infra.s3_region,
-        cache_path=infra.cache_dir / f"{name}.txt",
         download_dir=infra.download_dir / name,
         link_suffixes=settings.get("link_suffixes"),
         user_name=settings.get("user_name"),

@@ -33,37 +33,37 @@ services:
   crawler:
     build:
       context: ./crawler
-    env_file: .env
+    env_file: .env.example
     depends_on:
       - minio
 
-  extractor:
-    build:
-      context: .
-      dockerfile: services/extractor/Dockerfile
-    env_file: .env
-    depends_on:
-      - minio
-      - rabbitmq
+  # extractor:
+  #   build:
+  #     context: .
+  #     dockerfile: services/extractor/Dockerfile
+  #   env_file: .env.example
+  #   depends_on:
+  #     - minio
+  #     - rabbitmq
 
-  loader:
-    build:
-      context: .
-      dockerfile: services/loader/Dockerfile
-    env_file: .env
-    depends_on:
-      - rabbitmq
-      - postgres
+  # loader:
+  #   build:
+  #     context: .
+  #     dockerfile: services/loader/Dockerfile
+  #   env_file: .env.example
+  #   depends_on:
+  #     - rabbitmq
+  #     - postgres
 
-  api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    env_file: .env
-    ports:
-      - "8000:8000"
-    depends_on:
-      - postgres
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: api/Dockerfile
+  #   env_file: .env.example
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - postgres
 
 volumes:
   postgres-data:

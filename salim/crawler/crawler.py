@@ -16,7 +16,11 @@ Everything shared lives on the base class ``Crawler``::
         Uploader.upload(Downloader.download([link]))
     Cacher.save(newest)                    # advance the mark AFTER success
 
-Only the newest date is cached — not the page.
+Only the newest date is cached — not the page. Each crawler gets its own
+folder in the bucket (``<name>/<file>``, via ``Uploader``'s ``key_prefix``)
+and its own checkpoint object at the bucket root (``<name>_last_run.txt``,
+via ``Cacher``) — so the checkpoint travels with the data and survives
+container restarts/redeploys without a mounted volume.
 
 This module only knows how to run ONE source, given its ``Config``. The
 registry of which sources exist, and running all of them together, lives in
@@ -35,6 +39,8 @@ from urllib.parse import urljoin, urlparse
 
 import boto3
 import requests
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 
 log = logging.getLogger("salim.crawler")
 
@@ -133,6 +139,18 @@ class Uploader:
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=region,
+            # Without bounds, botocore's default connect/read timeouts (60s) and
+            # retry policy stack across head_bucket + create_bucket + upload_file,
+            # so one unreachable endpoint (e.g. MinIO not up / DNS name only valid
+            # inside docker-compose) can block a single crawler for several
+            # minutes -- observed hanging the whole orchestrator run at whichever
+            # crawler hits upload first. Fail fast instead so a bad endpoint
+            # surfaces quickly and the orchestrator moves on to the next crawler.
+            config=BotoConfig(
+                connect_timeout=5,
+                read_timeout=10,
+                retries={"max_attempts": 2, "mode": "standard"},
+            ),
         )
 
     def ensure_bucket(self) -> None:
@@ -165,26 +183,34 @@ class Cacher:
     """Persist / retrieve the high-water-mark date, so the next run only picks
     up links newer than it.
 
-    Backed by a local file. For durability across container restarts, point
-    ``CACHE_PATH`` at a mounted volume (or swap this for an S3/DB-backed store —
-    the slides' "last run save").
+    Backed by an object in the same S3 bucket as the crawler's own downloads,
+    at ``<name>_last_run.txt`` — one level up from the ``<name>/`` folder the
+    files themselves land in, so it survives container restarts/redeploys
+    without a mounted volume. Shares its ``boto3`` client with ``Uploader``.
     """
 
-    def __init__(self, path: str | os.PathLike):
-        self.path = Path(path)
+    def __init__(self, client, bucket: str, name: str):
+        self.client = client
+        self.bucket = bucket
+        self.key = f"{name}_last_run.txt"
 
     def load(self) -> str | None:
-        if self.path.exists():
-            return self.path.read_text(encoding="utf-8").strip() or None
-        return None
+        try:
+            obj = self.client.get_object(Bucket=self.bucket, Key=self.key)
+        except ClientError as exc:
+            error = exc.response.get("Error", {})
+            status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            if error.get("Code") in ("NoSuchKey", "NoSuchBucket") or status == 404:
+                return None
+            raise
+        return obj["Body"].read().decode("utf-8").strip() or None
 
     def save(self, date: str | None) -> None:
         if not date:
-            log.info("no date to checkpoint; leaving %s unchanged", self.path)
+            log.info("no date to checkpoint; leaving %s unchanged", self.key)
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(date, encoding="utf-8")
-        log.info("checkpoint saved: %s -> %s", date, self.path)
+        self.client.put_object(Bucket=self.bucket, Key=self.key, Body=date.encode("utf-8"))
+        log.info("checkpoint saved: %s -> s3://%s/%s", date, self.bucket, self.key)
 
 
 # --------------------------------------------------------------------------- #
@@ -199,7 +225,6 @@ class Config:
     s3_access_key: str | None
     s3_secret_key: str | None
     s3_region: str | None
-    cache_path: Path
     download_dir: Path
     link_suffixes: tuple[str, ...] | None
     user_name: str | None = None
@@ -217,7 +242,6 @@ class InfraConfig:
     s3_access_key: str | None
     s3_secret_key: str | None
     s3_region: str | None
-    cache_dir: Path
     download_dir: Path
 
 
@@ -230,7 +254,6 @@ def load_infra_config() -> InfraConfig:
         s3_access_key=os.environ.get("S3_ACCESS_KEY"),
         s3_secret_key=os.environ.get("S3_SECRET_KEY"),
         s3_region=os.environ.get("S3_REGION"),
-        cache_dir=Path(os.environ.get("CACHE_DIR", tmp / "cache")),
         download_dir=Path(os.environ.get("DOWNLOAD_DIR", tmp / "downloads")),
     )
 
@@ -253,8 +276,9 @@ class Crawler(ABC):
             config.s3_access_key,
             config.s3_secret_key,
             config.s3_region,
+            key_prefix=self.name,
         )
-        self._cacher = Cacher(config.cache_path)
+        self._cacher = Cacher(self._uploader.client, config.bucket, self.name)
 
     # --- source-specific (implement these) --- #
     @abstractmethod

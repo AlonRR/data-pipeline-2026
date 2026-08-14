@@ -22,8 +22,29 @@ class _DummyS3Client:
     def upload_file(self, *args, **kwargs) -> None:
         return None
 
+    def get_object(self, **kwargs):
+        raise AssertionError("get_object should not be called in these tests")
+
+    def put_object(self, **kwargs) -> None:
+        return None
+
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(client=lambda *args, **kwargs: _DummyS3Client()))
+sys.modules.setdefault("botocore", types.ModuleType("botocore"))
+_botocore_config = types.ModuleType("botocore.config")
+_botocore_config.Config = lambda *args, **kwargs: None
+sys.modules.setdefault("botocore.config", _botocore_config)
+_botocore_exceptions = types.ModuleType("botocore.exceptions")
+
+
+class _DummyClientError(Exception):
+    def __init__(self, response=None, operation_name=None):
+        super().__init__("client error")
+        self.response = response or {}
+
+
+_botocore_exceptions.ClientError = _DummyClientError
+sys.modules.setdefault("botocore.exceptions", _botocore_exceptions)
 
 from concrete_crawlers.cerberus import CerberusCrawler
 from crawler import Config
@@ -71,7 +92,6 @@ class CerberusCrawlerTests(unittest.TestCase):
             s3_access_key=None,
             s3_secret_key=None,
             s3_region=None,
-            cache_path=tmpdir / f"{name}.txt",
             download_dir=tmpdir / name,
             link_suffixes=None,
             user_name=user_name,
@@ -135,8 +155,9 @@ class CerberusCrawlerTests(unittest.TestCase):
 
         self.assertEqual(crawler.name, "yohananof")
         self.assertEqual(crawler._log.name, "salim.crawler.yohananof")
-        self.assertTrue(str(crawler.config.cache_path).endswith("yohananof.txt"))
         self.assertTrue(str(crawler.config.download_dir).endswith("yohananof"))
+        self.assertEqual(crawler._uploader.key_prefix, "yohananof")
+        self.assertEqual(crawler._cacher.key, "yohananof_last_run.txt")
 
 
 if __name__ == "__main__":

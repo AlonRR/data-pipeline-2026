@@ -23,8 +23,43 @@ class _DummyS3Client:
     def upload_file(self, *args, **kwargs) -> None:
         return None
 
+    def get_object(self, **kwargs):
+        raise AssertionError("get_object should not be called in these tests")
+
+    def put_object(self, **kwargs) -> None:
+        return None
+
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(client=lambda *args, **kwargs: _DummyS3Client()))
+sys.modules.setdefault("botocore", types.ModuleType("botocore"))
+_botocore_config = types.ModuleType("botocore.config")
+_botocore_config.Config = lambda *args, **kwargs: None
+sys.modules.setdefault("botocore.config", _botocore_config)
+_botocore_exceptions = types.ModuleType("botocore.exceptions")
+
+
+class _DummyClientError(Exception):
+    def __init__(self, response=None, operation_name=None):
+        super().__init__("client error")
+        self.response = response or {}
+
+
+_botocore_exceptions.ClientError = _DummyClientError
+sys.modules.setdefault("botocore.exceptions", _botocore_exceptions)
+
+
+def _stub_module(module_name: str, class_name: str, crawler_name: str) -> None:
+    module = types.ModuleType(module_name)
+    crawler_cls = type(class_name, (), {"name": crawler_name})
+    setattr(module, class_name, crawler_cls)
+    sys.modules.setdefault(module_name, module)
+
+
+_stub_module("concrete_crawlers.hazi_hinam", "HaziHinamCrawler", "hazi_hinam")
+_stub_module("concrete_crawlers.shufersal", "ShufersalCrawler", "shufersal")
+_stub_module("concrete_crawlers.super_pharm", "SuperPharmCrawler", "super_pharm")
+_stub_module("concrete_crawlers.victory", "VictoryCrawler", "victory")
+_stub_module("concrete_crawlers.wolt", "WoltCrawler", "wolt")
 
 from concrete_crawlers.cerberus import CerberusCrawler
 from crawler import InfraConfig
@@ -54,7 +89,6 @@ class OrchestratorTests(unittest.TestCase):
             s3_access_key=None,
             s3_secret_key=None,
             s3_region=None,
-            cache_dir=tmpdir / "cache",
             download_dir=tmpdir / "downloads",
         )
 
@@ -71,7 +105,6 @@ class OrchestratorTests(unittest.TestCase):
 
         self.assertEqual(config.name, "rami_levi")
         self.assertEqual(config.password, "from-env")
-        self.assertEqual(config.cache_path, infra.cache_dir / "rami_levi.txt")
         self.assertEqual(config.download_dir, infra.download_dir / "rami_levi")
 
     def test_run_registers_both_cerberus_configurations_with_distinct_instance_names(self):
