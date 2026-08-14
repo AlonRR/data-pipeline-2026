@@ -51,10 +51,7 @@ jobs:
         run: .venv/bin/python orchestrator.py
         env:
           S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
-          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
-          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
-          S3_BUCKET: ${{ secrets.S3_BUCKET || 'raw-prices' }}
-          S3_REGION: ${{ secrets.S3_REGION || 'us-east-1' }}
-          CRAWLER_YOHANANOF_PASSWORD: ${{ secrets.CRAWLER_YOHANANOF_PASSWORD }}
-          CRAWLER_VICTORY_START_DATE: "20260801"
-          DOWNLOAD_DIR: ${{ runner.temp }}/salim-downloads
+          S3_ACCESS_KEY: ${{ vars.SUPABASE_ACCESS_KEY_ID }}
+          S3_SECRET_KEY: ${{ secrets.SUPABASE_ACCESS_SECRET_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET || 'SalimPrices' }}
+          S3_REGION: ${{ secrets.S3_REGION || 'eu-central-1' }}
