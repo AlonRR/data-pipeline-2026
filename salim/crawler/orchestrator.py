@@ -9,6 +9,7 @@ from concrete_crawlers.yohananof import YohananofCrawler
 from concrete_crawlers.wolt import WoltCrawler
 from concrete_crawlers.hazi_hinam import HaziHinamCrawler
 from concrete_crawlers.victory import VictoryCrawler
+from concrete_crawlers.super_pharm import SuperPharmCrawler
 
 log = logging.getLogger("salim.crawler.orchestrator")
 
@@ -21,6 +22,7 @@ CRAWLERS: list[type[Crawler]] = [
     ShufersalCrawler,
     WoltCrawler,
     VictoryCrawler,
+    SuperPharmCrawler,
 ]
 
 # crawler name -> source-specific settings, merged with the shared
@@ -47,6 +49,9 @@ CRAWLER_CONFIGS: dict[str, dict] = {
     },
     "victory": {
         "source_url": "https://laibcatalog.co.il/victory/index.html",
+    },
+    "super_pharm": {
+        "source_url": "http://prices.super-pharm.co.il/",
     },
 }
 
