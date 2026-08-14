@@ -64,6 +64,7 @@ def _build_config(name: str, settings: dict, infra: InfraConfig) -> Config:
         link_suffixes=settings.get("link_suffixes"),
         user_name=settings.get("user_name"),
         password=password,
+        name=name
     )
 
 

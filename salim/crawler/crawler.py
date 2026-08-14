@@ -228,6 +228,7 @@ class Config:
     link_suffixes: tuple[str, ...] | None
     user_name: str | None = None
     password: str | None = None
+    name: str | None = None  # optional override for logging; defaults to class name
 
 
 # --------------------------------------------------------------------------- #
