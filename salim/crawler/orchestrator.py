@@ -71,6 +71,7 @@ CRAWLER_CONFIGS: dict[str, dict] = {
 
 def _build_config(name: str, settings: dict, infra: InfraConfig) -> Config:
     password = os.environ.get(f"CRAWLER_{name.upper()}_PASSWORD", settings.get("password"))
+    start_date = os.environ.get(f"CRAWLER_{name.upper()}_START_DATE", settings.get("start_date"))
     return Config(
         name=name,
         source_url=settings["source_url"],
@@ -83,6 +84,7 @@ def _build_config(name: str, settings: dict, infra: InfraConfig) -> Config:
         link_suffixes=settings.get("link_suffixes"),
         user_name=settings.get("user_name"),
         password=password,
+        start_date=start_date,
     )
 
 

@@ -92,7 +92,7 @@ class OrchestratorTests(unittest.TestCase):
             download_dir=tmpdir / "downloads",
         )
 
-    def test_build_config_uses_registration_name_for_paths_and_password_env_var(self):
+    def test_build_config_uses_registration_name_for_paths_and_env_overrides(self):
         infra = self._infra()
         settings = {
             "source_url": "https://url.publishedprices.co.il/login",
@@ -100,12 +100,39 @@ class OrchestratorTests(unittest.TestCase):
             "password": "fallback",
         }
 
-        with patch.dict(os.environ, {"CRAWLER_RAMI_LEVI_PASSWORD": "from-env"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "CRAWLER_RAMI_LEVI_PASSWORD": "from-env",
+                "CRAWLER_RAMI_LEVI_START_DATE": "20260805",
+            },
+            clear=False,
+        ):
             config = orchestrator._build_config("rami_levi", settings, infra)
 
         self.assertEqual(config.name, "rami_levi")
         self.assertEqual(config.password, "from-env")
+        self.assertEqual(config.start_date, "20260805")
         self.assertEqual(config.download_dir, infra.download_dir / "rami_levi")
+
+    def test_build_config_passes_yohananof_start_date_into_crawler_config(self):
+        infra = self._infra()
+        settings = {
+            "source_url": "https://url.publishedprices.co.il/login",
+            "user_name": "yohananof",
+            "password": "",
+        }
+
+        with patch.dict(
+            os.environ,
+            {"CRAWLER_YOHANANOF_START_DATE": "20260807"},
+            clear=False,
+        ):
+            config = orchestrator._build_config("yohananof", settings, infra)
+
+        self.assertEqual(config.name, "yohananof")
+        self.assertEqual(config.start_date, "20260807")
+        self.assertEqual(config.download_dir, infra.download_dir / "yohananof")
 
     def test_run_registers_both_cerberus_configurations_with_distinct_instance_names(self):
         registrations = [
