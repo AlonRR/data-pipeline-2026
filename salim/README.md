@@ -116,6 +116,13 @@ docker compose run --rm loader-enrich python enrich.py --reset-unknown    # re-a
 Set `ANTHROPIC_API_KEY` in `.env`; the model is `ENRICHER_MODEL`.
 In production run the same command on a schedule (hourly is plenty).
 
+The LLM is deliberately a thin seam.
+`enrich.py` builds one `anthropic.Anthropic()` client and calls `messages.create` with a system prompt, a JSON list of `{id, name}` and a JSON schema for the answer; nothing else about the pipeline knows a model exists.
+To change the model, set `ENRICHER_MODEL`.
+To point at another endpoint that speaks the Anthropic Messages API (a proxy, or a local server that emulates it), set `ANTHROPIC_BASE_URL`; the SDK reads it without code changes.
+To swap providers entirely, implement the two-line `Resolver` protocol in `enrich.py` (`model` attribute plus `resolve(batch) -> {id: manufacturer | None}`) and hand it to `run_backfill`; the tests use exactly that hook with a fake.
+The API is billed from Console credits, separately from a claude.ai subscription; the key alone is not enough.
+
 **Trying it locally**
 
 ```bash
