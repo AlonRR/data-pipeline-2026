@@ -72,9 +72,67 @@ docker compose up --build
 - **extractor** — polls the bucket for new zip files, extracts them, converts each
   price file (XML/CSV) to JSON, and publishes one message per record to the
   `raw-prices` queue in RabbitMQ.
-- **loader** — consumes the `raw-prices` queue, normalizes/validates each message,
-  and upserts it into the `prices` table (plus `stores`/`products` lookup tables).
+- **loader** - consumes the `raw-prices` queue in batches, upserts price items into
+  `products` + `prices` and promotions into `promotions` + `promotion_items`, and
+  fills in each product's manufacturer. See [Loader and enricher](#loader-and-enricher).
 - **api** — FastAPI service exposing read endpoints over the `prices` data.
+
+## Loader and enricher
+
+The loader (`services/loader/`) is the queue consumer.
+Both extractor outputs land on the same `raw-prices` queue, so each message is dispatched by shape:
+a `promotionId` means a promotion, `itemCode` + `price` means a price item, anything else is poison.
+
+**Tables.**
+They are created with `create_all()` at startup.
+There is no migration tool yet, so a column change on a live database is a manual `ALTER`.
+
+| Table | Key | Holds |
+|---|---|---|
+| `chains` | `chain_id` | ChainId → display name, seeded from `chains.py` |
+| `products` | `(provider, item_code)` | name, unit fields, and the manufacturer with its `manufacturer_status` (`pending` / `resolved` / `unknown`) |
+| `prices` | `(provider, store_id, item_code)` | current price and the source `update_time` |
+| `promotions` | `(provider, store_id, promotion_id)` | description and validity window |
+| `promotion_items` | `(…, item_code)` | per-item deal terms; replaced wholesale when the promotion is upserted |
+| `manufacturers` | normalized item name | resolution cache and audit log (`source` is `dictionary`, `llm` or `manual`) |
+
+`provider` is the numeric `ChainId` from the XML, everywhere.
+Every write is an idempotent upsert, and a row's `update_time` never goes backwards, so redelivered or out-of-order messages are harmless.
+Poison messages are copied to `raw-prices.dlq` (with an `x-reason` header) and acked; anything else that fails nacks the whole batch back for redelivery.
+
+**Manufacturer enrichment** runs in two tiers.
+The consumer only does what costs nothing, in order: the XML's own `ManufactureName` (unless it is a placeholder like `לא ידוע`) → the `manufacturers` cache → a whole-token match against the seed brand dictionary (`brands.py`; a name mentioning two brands is treated as ambiguous).
+Whatever falls through stays `pending`.
+The consumer reloads the cache every `LOADER_CACHE_REFRESH_SECONDS` (default 10 minutes) to pick up what the sweeper resolved.
+The sweeper, `enrich.py --backfill`, then sends pending names to `claude-haiku-4-5` in batches of 50 with a structured-output schema, marks each product `resolved` or `unknown`, and caches the answer so the same name is never asked twice, on any chain.
+It exits immediately when nothing is pending, and a failed request charges every name in that batch one attempt and ends the run (`ENRICHER_MAX_ATTEMPTS`, default 3), so an outage costs one request per run.
+
+```bash
+docker compose run --rm loader-enrich                       # resolve pending products
+docker compose run --rm loader-enrich python enrich.py --reset-attempts   # retry exhausted names
+docker compose run --rm loader-enrich python enrich.py --reset-unknown    # re-ask "no manufacturer" answers
+```
+
+Set `ANTHROPIC_API_KEY` in `.env`; the model is `ENRICHER_MODEL`.
+In production run the same command on a schedule (hourly is plenty).
+
+**Trying it locally**
+
+```bash
+cd salim
+docker compose up -d postgres rabbitmq loader
+python services/loader/scripts/publish_sample.py --poison   # built-in samples, or pass JSON files
+docker compose logs loader
+docker compose run --rm loader-enrich
+```
+
+**Tests** (unit tests always run; the DB-backed ones need a Postgres and skip otherwise):
+
+```bash
+cd salim/services/loader
+TEST_DATABASE_URL=postgresql+psycopg2://salim:salim@localhost:5432/salim \
+  PYTHONPATH=../.. python -m unittest discover -s tests -t .
+```
 
 ## Deploying to production
 
