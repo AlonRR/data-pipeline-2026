@@ -123,16 +123,6 @@ To point at another endpoint that speaks the Anthropic Messages API (a proxy, or
 To swap providers entirely, implement the two-line `Resolver` protocol in `enrich.py` (`model` attribute plus `resolve(batch) -> {id: manufacturer | None}`) and hand it to `run_backfill`; the tests use exactly that hook with a fake.
 The API is billed from Console credits, separately from a claude.ai subscription; the key alone is not enough.
 
-**Trying it locally**
-
-```bash
-cd salim
-docker compose up -d postgres rabbitmq loader
-python services/loader/scripts/publish_sample.py --poison   # built-in samples, or pass JSON files
-docker compose logs loader
-docker compose run --rm loader-enrich
-```
-
 ## Deploying to production
 
 Each of `crawler/`, `services/extractor/`, `services/loader/`, and `api/` has its
