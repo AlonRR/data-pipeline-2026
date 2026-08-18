@@ -133,14 +133,6 @@ docker compose logs loader
 docker compose run --rm loader-enrich
 ```
 
-**Tests** (unit tests always run; the DB-backed ones need a Postgres and skip otherwise):
-
-```bash
-cd salim/services/loader
-TEST_DATABASE_URL=postgresql+psycopg2://salim:salim@localhost:5432/salim \
-  PYTHONPATH=../.. python -m unittest discover -s tests -t .
-```
-
 ## Deploying to production
 
 Each of `crawler/`, `services/extractor/`, `services/loader/`, and `api/` has its
