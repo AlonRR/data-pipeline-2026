@@ -7,6 +7,11 @@ serves the normalized data over an API.
 
 ## Architecture
 
+The extractor trigger strategy is documented in
+[`docs/decisions/0001-triggering-extractors.md`](../docs/decisions/0001-triggering-extractors.md):
+a Supabase Database Webhook provides the primary notification, with a periodic
+S3 listing as a recovery path.
+
 ```
 crawler (cron) --> Supabase Storage bucket (zip files)
                         |
