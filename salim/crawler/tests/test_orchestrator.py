@@ -134,10 +134,11 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(config.start_date, "20260807")
         self.assertEqual(config.download_dir, infra.download_dir / "yohananof")
 
-    def test_run_registers_both_cerberus_configurations_with_distinct_instance_names(self):
+    def test_run_registers_all_cerberus_configurations_with_distinct_instance_names(self):
         registrations = [
             orchestrator.CrawlerRegistration(name="yohananof", crawler_cls=_RecordingCrawler),
             orchestrator.CrawlerRegistration(name="rami_levi", crawler_cls=_RecordingCrawler),
+            orchestrator.CrawlerRegistration(name="tiv_taam", crawler_cls=_RecordingCrawler),
         ]
 
         with patch("orchestrator.load_infra_config", return_value=self._infra()):
@@ -148,11 +149,19 @@ class OrchestratorTests(unittest.TestCase):
             {
                 "yohananof": ["yohananof-result"],
                 "rami_levi": ["rami_levi-result"],
+                "tiv_taam": ["tiv_taam-result"],
             },
         )
-        self.assertEqual([crawler.name for crawler in _RecordingCrawler.instances], ["yohananof", "rami_levi"])
+        self.assertEqual(
+            [crawler.name for crawler in _RecordingCrawler.instances],
+            ["yohananof", "rami_levi", "tiv_taam"],
+        )
         self.assertTrue(str(_RecordingCrawler.instances[0].config.download_dir).endswith("yohananof"))
         self.assertTrue(str(_RecordingCrawler.instances[1].config.download_dir).endswith("rami_levi"))
+        tiv_taam = _RecordingCrawler.instances[2]
+        self.assertTrue(str(tiv_taam.config.download_dir).endswith("tiv_taam"))
+        self.assertEqual(tiv_taam.config.user_name, "TivTaam")
+        self.assertEqual(tiv_taam.config.password, "")
 
 
 if __name__ == "__main__":
