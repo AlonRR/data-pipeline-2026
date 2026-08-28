@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pika
 from botocore.exceptions import ClientError
@@ -139,13 +140,18 @@ def list_supported_objects(client, bucket: str):
 
 
 def poll_once(channel, settings: Settings, client) -> dict[str, int]:
-    """Process the S3 delta in stable timestamp/key order."""
+    """Process the S3 delta through the start time of this poll.
+
+    A store with no checkpoint gets a full backfill. Objects uploaded after
+    ``poll_cutoff`` are intentionally left for the next scheduled run.
+    """
+    poll_cutoff = datetime.now(timezone.utc).isoformat()
     pending = []
     checkpoints = {}
     for key, timestamp in list_supported_objects(client, settings.bucket):
         store = key.split("/", 1)[0] if "/" in key else "salim"
         checkpoint = checkpoints.setdefault(store, Checkpoint(client, settings.bucket, store))
-        if not checkpoint.contains(key, timestamp):
+        if timestamp <= poll_cutoff and not checkpoint.contains(key, timestamp):
             pending.append((timestamp, key))
 
     results = {}
@@ -157,17 +163,27 @@ def poll_once(channel, settings: Settings, client) -> dict[str, int]:
     return results
 
 
-def run() -> None:
+def run_once() -> dict[str, int]:
+    """Connect to RabbitMQ, execute one delta poll, and exit."""
     settings = Settings.from_env()
     client = s3_client()
+    connection = pika.BlockingConnection(pika.URLParameters(settings.rabbit_url))
+    try:
+        channel = connection.channel()
+        channel.queue_declare(queue=settings.output_queue, durable=True)
+        channel.confirm_delivery()
+        return poll_once(channel, settings, client)
+    finally:
+        if connection.is_open:
+            connection.close()
+
+
+def run_forever() -> None:
+    """Run the poller continuously for Docker/background-worker deployments."""
+    settings = Settings.from_env()
     while True:
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(settings.rabbit_url))
-            channel = connection.channel()
-            channel.queue_declare(queue=settings.output_queue, durable=True)
-            channel.confirm_delivery()
-            poll_once(channel, settings, client)
-            connection.close()
+            run_once()
             log.info("next poll in %d seconds", settings.poll_interval)
             time.sleep(settings.poll_interval)
         except KeyboardInterrupt:
@@ -179,4 +195,7 @@ def run() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    run()
+    if "--once" in sys.argv[1:]:
+        run_once()
+    else:
+        run_forever()

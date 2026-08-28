@@ -94,3 +94,27 @@ docker compose up --build rabbitmq minio extractor
 The worker reads RabbitMQ credentials from `services/.env` when present. Set
 `EXTRACTOR_POLL_INTERVAL_SECONDS` to a smaller value for local iteration; the
 production default is `10800` seconds (three hours).
+
+### GitHub Actions schedule
+
+`.github/workflows/salim-extractor.yml` runs a single poll every six hours and
+can also be started manually. The first run for a store is a full backfill
+because `<store>_extractor_last_poll_time` does not exist yet. Later runs read
+that checkpoint, process through the poll's start time, and update it only
+after RabbitMQ confirms the messages.
+
+Add these repository **Actions secrets**:
+
+- `SUPABASE_ACCESS_SECRET_KEY`
+- `S3_ENDPOINT_URL`
+- `RABBITMQ_URL`
+
+Add these repository **Actions variables**:
+
+- `SUPABASE_ACCESS_KEY_ID`
+
+Optional repository **Actions variables** (defaults shown):
+
+- `S3_BUCKET=SalimPrices`
+- `S3_REGION=us-east-1`
+- `RABBITMQ_QUEUE=raw-prices`
