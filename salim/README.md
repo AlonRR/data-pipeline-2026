@@ -118,3 +118,4 @@ Optional repository **Actions variables** (defaults shown):
 - `S3_BUCKET=SalimPrices`
 - `S3_REGION=us-east-1`
 - `RABBITMQ_QUEUE=raw-prices`
+- `EXTRACTOR_BATCH_SIZE=30`
