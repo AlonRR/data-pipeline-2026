@@ -16,6 +16,11 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   minio:
     image: minio/minio
@@ -37,14 +42,19 @@ services:
     depends_on:
       - minio
 
-  # extractor:
-  #   build:
-  #     context: .
-  #     dockerfile: services/extractor/Dockerfile
-  #   env_file: .env.example
-  #   depends_on:
-  #     - minio
-  #     - rabbitmq
+  extractor:
+    build:
+      context: ./services/extractor
+    env_file:
+      - .env.example
+      - path: ./services/.env
+        required: false
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_started
 
   # loader:
   #   build:
