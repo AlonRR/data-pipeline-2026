@@ -26,6 +26,7 @@ class CrawlerRegistration:
 CRAWLERS: list[CrawlerRegistration | type[Crawler]] = [
     CrawlerRegistration(name="yohananof", crawler_cls=CerberusCrawler),
     CrawlerRegistration(name="rami_levi", crawler_cls=CerberusCrawler),
+    CrawlerRegistration(name="tiv_taam", crawler_cls=CerberusCrawler),
     HaziHinamCrawler,
     ShufersalCrawler,
     WoltCrawler,
@@ -65,6 +66,11 @@ CRAWLER_CONFIGS: dict[str, dict] = {
     },
     "super_pharm": {
         "source_url": "http://prices.super-pharm.co.il/",
+    },
+    "tiv_taam": {
+        "source_url": "https://url.publishedprices.co.il/login",
+        "user_name": "TivTaam",
+        "password": "",
     },
 }
 
