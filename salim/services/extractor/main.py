@@ -6,6 +6,7 @@ in S3, so container restarts and deployments do not cause a full replay.
 """
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import os
@@ -29,6 +30,7 @@ class Settings:
     output_queue: str
     bucket: str
     poll_interval: int
+    batch_size: int
 
     @classmethod
     def from_env(cls):
@@ -37,6 +39,7 @@ class Settings:
             output_queue=os.environ.get("RABBITMQ_QUEUE", "raw-prices"),
             bucket=os.environ.get("S3_BUCKET", "SalimPrices"),
             poll_interval=max(1, int(os.environ.get("EXTRACTOR_POLL_INTERVAL_SECONDS", "10800"))),
+            batch_size=max(1, int(os.environ.get("EXTRACTOR_BATCH_SIZE", "30"))),
         )
 
 
@@ -46,15 +49,20 @@ class Checkpoint:
     def __init__(self, client, bucket: str, store: str):
         self.client, self.bucket = client, bucket
         self.key = f"{store}_extractor_last_poll_time"
+        self._state = None
 
     def load(self) -> dict:
+        if self._state is not None:
+            return self._state
         try:
             obj = self.client.get_object(Bucket=self.bucket, Key=self.key)
         except ClientError as exc:
             if exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 404:
-                return {"timestamp": "", "keys": []}
+                self._state = {"timestamp": "", "keys": []}
+                return self._state
             raise
-        return json.loads(obj["Body"].read())
+        self._state = json.loads(obj["Body"].read())
+        return self._state
 
     def contains(self, key: str, timestamp: str) -> bool:
         state = self.load()
@@ -66,6 +74,7 @@ class Checkpoint:
             state = {"timestamp": timestamp, "keys": [key]}
         elif timestamp == state["timestamp"] and key not in state["keys"]:
             state["keys"].append(key)
+        self._state = state
         self.client.put_object(
             Bucket=self.bucket,
             Key=self.key,
@@ -92,14 +101,21 @@ def s3_client():
     )
 
 
-def process_object(channel, settings: Settings, client, key: str, timestamp: str) -> int:
+def process_object(
+    channel,
+    settings: Settings,
+    client,
+    key: str,
+    timestamp: str,
+    checkpoint: Checkpoint | None = None,
+) -> int:
     bucket = settings.bucket
     parser = parser_for(key)
     if parser is None:
         log.info("ignoring unsupported object %s", key)
         return 0
     store = key.split("/", 1)[0] if "/" in key else "salim"
-    checkpoint = Checkpoint(client, bucket, store)
+    checkpoint = checkpoint or Checkpoint(client, bucket, store)
     if checkpoint.contains(key, timestamp):
         log.info("already processed %s", key)
         return 0
@@ -125,18 +141,26 @@ def process_object(channel, settings: Settings, client, key: str, timestamp: str
     return count
 
 
-def list_supported_objects(client, bucket: str):
-    """Yield every supported object using S3 pagination.
+def list_supported_batches(client, bucket: str, batch_size: int):
+    """Yield supported objects one S3 page at a time.
 
-    S3's API is flat even when keys contain store prefixes, which avoids one
-    list request per directory and works for both MinIO and Supabase Storage.
+    A page is processed before the next page is requested, so a full backfill
+    starts publishing immediately and memory use stays bounded.
     """
     paginator = client.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket):
+    for page in paginator.paginate(
+        Bucket=bucket,
+        PaginationConfig={"PageSize": batch_size},
+    ):
+        batch = []
         for item in page.get("Contents", []):
             key = item["Key"]
             if parser_for(key) is not None:
-                yield key, item["LastModified"].astimezone(timezone.utc).isoformat()
+                batch.append(
+                    (key, item["LastModified"].astimezone(timezone.utc).isoformat())
+                )
+        if batch:
+            yield batch
 
 
 def poll_once(channel, settings: Settings, client) -> dict[str, int]:
@@ -146,20 +170,54 @@ def poll_once(channel, settings: Settings, client) -> dict[str, int]:
     ``poll_cutoff`` are intentionally left for the next scheduled run.
     """
     poll_cutoff = datetime.now(timezone.utc).isoformat()
-    pending = []
     checkpoints = {}
-    for key, timestamp in list_supported_objects(client, settings.bucket):
-        store = key.split("/", 1)[0] if "/" in key else "salim"
-        checkpoint = checkpoints.setdefault(store, Checkpoint(client, settings.bucket, store))
-        if timestamp <= poll_cutoff and not checkpoint.contains(key, timestamp):
-            pending.append((timestamp, key))
-
     results = {}
-    for timestamp, key in sorted(pending):
-        count = process_object(channel, settings, client, key, timestamp)
-        store = key.split("/", 1)[0] if "/" in key else "salim"
-        results[store] = results.get(store, 0) + count
-    log.info("poll complete: %d object(s), %d record(s)", len(pending), sum(results.values()))
+    processed_objects = 0
+    scanned_objects = 0
+    for batch_number, batch in enumerate(
+        list_supported_batches(client, settings.bucket, settings.batch_size),
+        start=1,
+    ):
+        scanned_objects += len(batch)
+        pending = []
+        for key, timestamp in batch:
+            store = key.split("/", 1)[0] if "/" in key else "salim"
+            checkpoint = checkpoints.setdefault(
+                store,
+                Checkpoint(client, settings.bucket, store),
+            )
+            if timestamp <= poll_cutoff and not checkpoint.contains(key, timestamp):
+                pending.append((timestamp, key, checkpoint))
+
+        log.info(
+            "S3 batch %d: scanned %d supported object(s), %d pending",
+            batch_number,
+            len(batch),
+            len(pending),
+        )
+        for timestamp, key, checkpoint in sorted(pending, key=lambda row: (row[0], row[1])):
+            try:
+                count = process_object(
+                    channel,
+                    settings,
+                    client,
+                    key,
+                    timestamp,
+                    checkpoint,
+                )
+            finally:
+                # Downloads are in-memory only; force collection of the XML
+                # tree and decompressed bytes before starting the next file.
+                gc.collect()
+            store = key.split("/", 1)[0] if "/" in key else "salim"
+            results[store] = results.get(store, 0) + count
+            processed_objects += 1
+    log.info(
+        "poll complete: scanned %d supported object(s), processed %d object(s), published %d record(s)",
+        scanned_objects,
+        processed_objects,
+        sum(results.values()),
+    )
     return results
 
 
