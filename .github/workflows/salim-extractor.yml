@@ -1,9 +1,6 @@
 name: Salim extractor
 
 on:
-  schedule:
-    # GitHub cron is UTC. Run every six hours, offset from the busy hour edge.
-    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 concurrency:
