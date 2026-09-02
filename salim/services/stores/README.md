@@ -215,3 +215,27 @@ Field coverage is partial and **absent values arrive as the *string* `"undefined
 not null** — `latitude`/`longitude` 519/1001, `branchPhone` 564/1001,
 `branchAddress` 637/1001, `city` 772/1001. Any parser that trusts truthiness will
 happily store `"undefined"` as a coordinate.
+
+### Measured end to end — 2 Sept 2026
+
+Full run against local Postgres, `docker compose run --rm stores`, counted from
+the `stores` table rather than from the run summary:
+
+| provider | branches | phone | coords | hours | city |
+|---|---|---|---|---|---|
+| shufersal | 416 | 308 | 316 | **0** | 320 |
+| yohananof | 50 | **0** | 27 | 27 | 15 |
+| rami_levi | 98 | 53 | **0** | 54 | 56 |
+| hazi_hinam | 12 | 11 | 11 | 5 | 9 |
+| **total** | **576** | 372 | 354 | 86 | 400 |
+
+**Two of the zeroes are permanent, and #23's DoD cannot be fully met because of
+them.** The issue asks for `phone` and `openningTimeFrame (from, to)` for all
+four chains. Yochananof's API carries no phone field, and Shufersal's Wix
+collection carries no opening hours — not empty values, no such field. Those
+would need a different source per chain (Google Places or the branch pages
+themselves), which is a separate piece of work, not a fix to these enrichers.
+
+Shufersal's 457 unmatched locator records are expected rather than a defect:
+the collection covers 791 retail branches across many sub-brands, while the
+mandated file lists the 416 that publish prices.
