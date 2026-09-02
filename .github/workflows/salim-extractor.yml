@@ -26,6 +26,7 @@ jobs:
       S3_REGION: ${{ vars.S3_REGION || 'us-east-1' }}
       RABBITMQ_QUEUE: ${{ vars.RABBITMQ_QUEUE || 'raw-prices' }}
       EXTRACTOR_BATCH_SIZE: ${{ vars.EXTRACTOR_BATCH_SIZE || '30' }}
+      EXTRACTOR_PUBLISH_BATCH_SIZE: ${{ vars.EXTRACTOR_PUBLISH_BATCH_SIZE || '500' }}
       LOG_LEVEL: INFO
 
     steps:

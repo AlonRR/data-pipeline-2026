@@ -119,3 +119,4 @@ Optional repository **Actions variables** (defaults shown):
 - `S3_REGION=us-east-1`
 - `RABBITMQ_QUEUE=raw-prices`
 - `EXTRACTOR_BATCH_SIZE=30`
+- `EXTRACTOR_PUBLISH_BATCH_SIZE=500`
