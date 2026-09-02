@@ -153,3 +153,65 @@ STORES_PROVIDERS=shufersal python main.py
 ```
 
 Environment: `DATABASE_URL`, optionally `STORES_PROVIDERS` (comma-separated).
+
+## Locator endpoints — Shufersal and Yochananof
+
+`enrichers/base.py` says the hard part of a new chain is finding where its site
+gets its branch list. Both remaining chains are solved; the endpoints and their
+traps are recorded here so nobody has to re-derive them.
+
+### Yochananof — GraphQL
+
+The consumer site is **`yochananof.co.il`** — spelled with a `ch`, unlike the
+crawler's `yohananof` provider name. Two traps before the data:
+
+- `www.yochananof.co.il` **fails TLS verification**: the Let's Encrypt cert is
+  issued for the apex `yochananof.co.il` only, with no `www` SAN. Request the
+  apex and verification passes — do **not** reach for `verify=False`.
+- The branch page is a Next.js app that renders nothing server-side. The data
+  comes from an Apollo GraphQL endpoint named in the JS bundle:
+  **`https://api.yochananof.co.il/graphql`**. Introspection is enabled.
+
+```graphql
+{ externalStores { storeNumber storeName address customerServicePhone locationMapUrl
+    openingHours { defaultByWeekday { weekday standard { from to } daylightSaving { from to } } } } }
+```
+
+Measured 2 Sept 2026 — **52 branches**: `storeNumber`/`storeName`/`address`
+52/52, `locationMapUrl` 47/52, `openingHours` 47/52, and
+**`customerServicePhone` 0/52 — Yochananof publishes no branch phone numbers
+here**, so that column stays null for this chain no matter how the matching goes.
+
+Two shape notes: hours are **minutes from midnight** (450 = 07:30, 1260 = 21:00)
+on a **0-based weekday** (0 = Sunday), so `day_name()` needs `weekday + 1`;
+Saturday arrives as `standard: []`, meaning closed rather than unknown. Summer
+hours are a separate `daylightSaving` range, present only where they differ.
+Coordinates are not their own fields — they are embedded in `locationMapUrl`, a
+Google Maps embed, as `!2d<longitude>!3d<latitude>`.
+
+### Shufersal — Wix Data collection
+
+The locator is **not** on the shop domain. `www.shufersal.co.il` links to it as
+`javascript:toggleBranchesModal()`, and the real page is
+`window.miglog.branchesLink` = **`https://www.shufersal.co.il/corp/branches`** —
+a Wix site, whose records live in a public Wix Data collection called
+`Branches` (`permissions.read: anyone`).
+
+Fetching it takes two requests: `GET /corp/_api/v1/access-tokens`, then the
+`instance` token of app **`675bbcef-18d8-41f5-800e-131ec9e08762`** (wix-data) as
+the `Authorization` header on
+`POST /corp/_api/cloud-data/v2/items/query`, body
+`{"dataCollectionId": "Branches", "query": {"paging": {"limit": 200, "offset": N}}}`.
+The page caps at 200, so it has to be paged.
+
+Measured 2 Sept 2026 — **1,001 rows**, and that count is the thing to be careful
+about. The mandated Stores file lists **417** Shufersal branches; this collection
+covers **15 sub-networks**, most of which are not Shufersal-branded retail:
+שופרסל דיל 227, **מחסנים (warehouses) 209**, Be 158, אקספרס 138, שלי 114,
+יש חסד 45, יוניברס 42, דן דיל 25, and smaller. Enriching against all 1,001
+invites false address matches; filter on `companyNetwork` first.
+
+Field coverage is partial and **absent values arrive as the *string* `"undefined"`,
+not null** — `latitude`/`longitude` 519/1001, `branchPhone` 564/1001,
+`branchAddress` 637/1001, `city` 772/1001. Any parser that trusts truthiness will
+happily store `"undefined"` as a coordinate.
