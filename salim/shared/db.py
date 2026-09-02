@@ -10,6 +10,8 @@ import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import sessionmaker
 
 from shared.models import Base
@@ -18,11 +20,26 @@ DEFAULT_DATABASE_URL = "postgresql+psycopg2://salim:salim@postgres:5432/salim"
 
 
 def database_url() -> str:
-    return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    # GitHub secrets copied from dashboards occasionally include a leading space
+    # or trailing newline. Neither is part of a valid SQLAlchemy URL.
+    value = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL).strip()
+    if not value:
+        raise RuntimeError("DATABASE_URL is empty")
+    return value
 
 
 def make_engine(url: str | None = None) -> Engine:
-    return create_engine(url or database_url(), pool_pre_ping=True, future=True)
+    value = url.strip() if url is not None else database_url()
+    try:
+        parsed = make_url(value)
+    except ArgumentError as exc:
+        raise RuntimeError(
+            "DATABASE_URL is not a valid SQLAlchemy connection URL; expected "
+            "postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DATABASE"
+        ) from exc
+    if parsed.get_backend_name() != "postgresql":
+        raise RuntimeError("DATABASE_URL must use PostgreSQL")
+    return create_engine(parsed, pool_pre_ping=True, future=True)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker:
