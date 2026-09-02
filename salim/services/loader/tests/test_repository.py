@@ -60,13 +60,16 @@ class RepositoryTest(PostgresTestCase):
         self.assertEqual(self.session.get(Product, ("7290", "111")).manufacturer_status, "pending")
 
     def test_older_price_does_not_overwrite_newer(self):
-        newer = price(price=Decimal("7.50"), update_time=datetime(2026, 8, 18, tzinfo=timezone.utc))
-        older = price(price=Decimal("6.00"), update_time=datetime(2026, 8, 10, tzinfo=timezone.utc))
+        newer = price(item_name="new name", price=Decimal("7.50"), update_time=datetime(2026, 8, 18, tzinfo=timezone.utc))
+        older = price(item_name="stale name", price=Decimal("6.00"), update_time=datetime(2026, 8, 10, tzinfo=timezone.utc))
         self.repo.upsert_prices([newer], manufacturers={})
         self.session.commit()
         self.repo.upsert_prices([older], manufacturers={})
         self.session.commit()
         self.assertEqual(self.session.get(Price, ("7290", "001", "111")).price, Decimal("7.50"))
+        product = self.session.get(Product, ("7290", "111"))
+        self.assertEqual(product.item_name, "new name")
+        self.assertEqual(product.source_update_time, newer.update_time)
 
     def test_resolved_manufacturer_is_not_reset_by_later_message(self):
         self.repo.upsert_prices([price()], manufacturers={("7290", "111"): Resolution("תנובה", "dictionary")})

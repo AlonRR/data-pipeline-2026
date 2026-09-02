@@ -61,6 +61,9 @@ class Product(Base):
     manufacturer_attempts = Column(Integer, nullable=False, default=0, server_default=text("0"))
     manufacturer_checked_at = Column(DateTime(timezone=True))
 
+    # Source publication timestamp. This prevents an older queue message from
+    # rolling slowly-changing product metadata back after a newer one arrived.
+    source_update_time = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (Index("ix_products_manufacturer_status", "manufacturer_status"),)

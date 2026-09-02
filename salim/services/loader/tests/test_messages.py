@@ -54,6 +54,17 @@ class ParseMessageTest(unittest.TestCase):
         self.assertEqual(msg.items[0].item_code, "729")
         self.assertEqual(msg.items[0].min_qty, Decimal("2"))
 
+    def test_promotion_with_malformed_item_is_invalid(self):
+        for malformed in ({"discountPrice": 20}, "not an object"):
+            with self.subTest(malformed=malformed):
+                with self.assertRaises(InvalidMessage):
+                    parse_message(dict(PROMOTION, items=[malformed]))
+
+    def test_promotion_without_items_field_is_invalid(self):
+        without_items = {key: value for key, value in PROMOTION.items() if key != "items"}
+        with self.assertRaises(InvalidMessage):
+            parse_message(without_items)
+
     def test_price_without_store_is_invalid(self):
         bad = dict(PRICE, storeId=None)
         with self.assertRaises(InvalidMessage):

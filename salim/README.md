@@ -97,7 +97,7 @@ There is no migration tool yet, so a column change on a live database is a manua
 | Table | Key | Holds |
 |---|---|---|
 | `chains` | `chain_id` | ChainId → display name, seeded from `chains.py` |
-| `products` | `(provider, item_code)` | name, unit fields, and the manufacturer with its `manufacturer_status` (`pending` / `resolved` / `unknown`) |
+| `products` | `(provider, item_code)` | name, unit fields, source timestamp, and the manufacturer with its `manufacturer_status` (`pending` / `resolved` / `unknown`) |
 | `prices` | `(provider, store_id, item_code)` | current price and the source `update_time` |
 | `promotions` | `(provider, store_id, promotion_id)` | description and validity window |
 | `promotion_items` | `(…, item_code)` | per-item deal terms; replaced wholesale when the promotion is upserted |

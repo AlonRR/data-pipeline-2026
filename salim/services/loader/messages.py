@@ -90,9 +90,12 @@ def _price(p: dict) -> PriceMessage:
 
 
 def _promotion(p: dict) -> PromotionMessage:
-    raw_items = p.get("items") or []
+    raw_items = p.get("items")
     if not isinstance(raw_items, list):
         raise InvalidMessage("promotion items is not a list")
+    for index, item in enumerate(raw_items):
+        if not isinstance(item, dict) or _text(item.get("itemCode")) is None:
+            raise InvalidMessage(f"promotion item {index} is not an object with an itemCode")
     return PromotionMessage(
         provider=_required(p, "providerId"),
         store_id=_required(p, "storeId"),
@@ -101,7 +104,7 @@ def _promotion(p: dict) -> PromotionMessage:
         start_time=_timestamp(p.get("startTime")),
         end_time=_timestamp(p.get("endTime")),
         update_time=_timestamp(p.get("updateTime")),
-        items=[_promotion_item(i) for i in raw_items if isinstance(i, dict) and i.get("itemCode")],
+        items=[_promotion_item(i) for i in raw_items],
     )
 
 

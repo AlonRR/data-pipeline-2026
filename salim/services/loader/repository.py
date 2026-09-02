@@ -81,8 +81,10 @@ class Repository:
                 "manufacturer": unless_resolved(Product.manufacturer),
                 "manufacturer_status": unless_resolved(Product.manufacturer_status),
                 "manufacturer_checked_at": unless_resolved(Product.manufacturer_checked_at),
+                "source_update_time": e.source_update_time,
                 "updated_at": func.now(),
             },
+            where=_not_older(Product.source_update_time, e.source_update_time),
         )
         self.session.execute(stmt)
 
@@ -121,6 +123,7 @@ class Repository:
             "manufacturer": manufacturer,
             "manufacturer_status": status,
             "manufacturer_checked_at": checked,
+            "source_update_time": m.update_time,
         }
 
     # -------------------------------------------------------------- promotions
