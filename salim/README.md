@@ -7,11 +7,15 @@ serves the normalized data over an API.
 
 ## Architecture
 
+The extractor trigger strategy is documented in
+[`docs/decisions/0001-triggering-extractors.md`](../docs/decisions/0001-triggering-extractors.md):
+the worker polls S3 every three hours and processes only each store's delta.
+
 ```
 crawler (cron) --> Supabase Storage bucket (zip files)
                         |
                         v
-              extractor worker (pull zip, unzip, XML/CSV -> JSON)
+              extractor worker (3-hour S3 delta poll)
                         |
                         v
                   RabbitMQ (CloudAMQP)
@@ -31,7 +35,7 @@ crawler (cron) --> Supabase Storage bucket (zip files)
 | Object store | MinIO (S3-compatible)      | Supabase Storage       |
 | Queue        | RabbitMQ                   | CloudAMQP              |
 | Database     | Postgres                   | Supabase Postgres      |
-| Compute      | docker-compose services     | Render.com services    |
+| Compute      | docker-compose services     | Python worker platform |
 
 Each service reads its object store / queue / DB connection details from
 environment variables, so the same code runs locally against MinIO/RabbitMQ/Postgres
@@ -69,12 +73,15 @@ docker compose up --build
 - **crawler** — runs on an internal schedule (`CRON_SCHEDULE` env, cron syntax),
   scrapes/downloads source price files, zips them, and uploads the zip to the
   `raw-prices` bucket.
-- **extractor** — polls the bucket for new zip files, extracts them, converts each
-  price file (XML/CSV) to JSON, and publishes one message per record to the
-  `raw-prices` queue in RabbitMQ.
-- **loader** - consumes the `raw-prices` queue in batches, upserts price items into
-  `products` + `prices` and promotions into `promotions` + `promotion_items`, and
-  fills in each product's manufacturer. See [Loader and enricher](#loader-and-enricher).
+- **extractor worker** — every three hours, paginates through `SalimPrices`,
+  downloads only objects above each store's watermark, runs
+  `prices.py`/`promotions.py`, and publishes persistent JSON messages to
+  `raw-prices`. It records `<store>_extractor_last_poll_time` as a JSON object
+  in S3 only after RabbitMQ confirms all messages. Source objects are retained.
+- **loader** — consumes `raw-prices` in batches, upserts price items into
+  `products` + `prices` and promotions into `promotions` + `promotion_items`,
+  and fills in each product's manufacturer. See
+  [Loader and enricher](#loader-and-enricher).
 - **api** — FastAPI service exposing read endpoints over the `prices` data.
 
 ## Loader and enricher
@@ -128,10 +135,20 @@ The API is billed from Console credits, separately from a claude.ai subscription
 ## Deploying to production
 
 Each of `crawler/`, `services/extractor/`, `services/loader/`, and `api/` has its
-own `Dockerfile` and is meant to be deployed as an independent Render.com service
-(background worker for crawler/extractor/loader, web service for api), pointed at
-the real Supabase Storage bucket, CloudAMQP instance, and Supabase Postgres
-connection string via environment variables — no code changes needed.
+own `Dockerfile`. Point each service at Supabase Storage, CloudAMQP, and Supabase
+Postgres through environment variables.
+
+### Extractor on GitHub Actions
+
+`.github/workflows/salim-extractor.yml` runs a single poll every six hours and
+can also be started manually. The first run for a store is a full backfill
+because `<store>_extractor_last_poll_time` does not exist yet. Later runs read
+that checkpoint, process through the poll's start time, and update it only
+after RabbitMQ confirms the messages.
+
+The extractor requires the `SUPABASE_ACCESS_SECRET_KEY`, `S3_ENDPOINT_URL`, and
+`RABBITMQ_URL` repository secrets and the `SUPABASE_ACCESS_KEY_ID` repository
+variable. See `.env.example` for optional tuning variables.
 
 ### Loader on GitHub Actions
 
