@@ -174,11 +174,14 @@ variable. See `.env.example` for optional tuning variables.
 
 ### Loader on GitHub Actions
 
-The `Load queue into Supabase` workflow runs every five minutes and can also
-be started manually. It drains `prices-q` in batches, exits after the queue
+The `Load queue into Supabase` workflow is manual-only while production is
+being validated. It drains `prices-q` in batches, exits after the queue
 has been idle for 30 seconds, and has a 15-minute safety timeout. If the runner
 is stopped mid-batch, RabbitMQ redelivers those messages because the loader only
 acknowledges them after the database transaction commits.
+
+After a manual run is validated, uncomment the five-minute `schedule` block in
+`.github/workflows/load-queue-to-supabase.yml`.
 
 Configure these repository secrets under **Settings → Secrets and variables →
 Actions**:

@@ -1,9 +1,10 @@
 name: Load queue into Supabase
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
+  # Enable only after the manual production run has been validated.
+  # schedule:
+  #   - cron: "*/5 * * * *"
 
 permissions:
   contents: read
