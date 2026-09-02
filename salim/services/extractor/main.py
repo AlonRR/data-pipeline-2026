@@ -37,7 +37,7 @@ class Settings:
     def from_env(cls):
         return cls(
             rabbit_url=os.environ["RABBITMQ_URL"],
-            output_queue=os.environ.get("RABBITMQ_QUEUE", "raw-prices"),
+            output_queue=os.environ.get("RABBITMQ_QUEUE", "prices-q"),
             bucket=os.environ.get("S3_BUCKET", "SalimPrices"),
             poll_interval=max(1, int(os.environ.get("EXTRACTOR_POLL_INTERVAL_SECONDS", "10800"))),
             batch_size=max(1, int(os.environ.get("EXTRACTOR_BATCH_SIZE", "30"))),
