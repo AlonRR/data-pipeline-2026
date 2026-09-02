@@ -53,6 +53,7 @@ salim/
   services/
     extractor/             # pulls zip from bucket, extracts, converts to JSON, publishes to queue
     loader/                # consumes queue, formats, writes to DB
+    stores/                # syncs the `stores` table from each chain's published store list
   api/                     # FastAPI read API over the stored data
 ```
 
@@ -80,6 +81,10 @@ docker compose up --build
   in S3 only after RabbitMQ confirms all messages. Source objects are retained.
 - **loader** — consumes the `raw-prices` queue, normalizes/validates each message,
   and upserts it into the `prices` table (plus `stores`/`products` lookup tables).
+- **stores** — syncs the `stores` table from each chain's mandated `Stores`
+  publication (branch id, name, address) and flags branches that stopped being
+  listed as inactive. Runs to completion and exits; see
+  [services/stores/README.md](services/stores/README.md).
 - **api** — FastAPI service exposing read endpoints over the `prices` data.
 
 ## Deploying to production
