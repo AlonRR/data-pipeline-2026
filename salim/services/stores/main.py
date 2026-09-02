@@ -31,6 +31,8 @@ from base import StoreSource
 from enrichers.base import Enricher
 from enrichers.hazi_hinam import HaziHinamEnricher
 from enrichers.rami_levi import RamiLeviEnricher
+from enrichers.shufersal import ShufersalEnricher
+from enrichers.yochananof import YochananofEnricher
 from matching import match_stores
 from repository import apply_enrichment, deactivate_missing, upsert_stores
 from shared.db import get_session, init_db
@@ -50,12 +52,15 @@ SOURCES: list[type[StoreSource]] = [
     HaziHinamStoreSource,
 ]
 
-# Optional second half, keyed by provider. Shufersal and Yohananof are absent
-# because their branch lists arrive over XHR from an endpoint not yet found —
-# see enrichers/base.py for how Hazi Hinam's was located.
+# Optional second half, keyed by provider. All four chains are covered; the
+# endpoints and their traps are in services/stores/README.md. Coverage is not
+# uniform and cannot be: Yochananof publishes no phone numbers, and Shufersal's
+# collection carries no opening hours at all.
 ENRICHERS: dict[str, type[Enricher]] = {
     HaziHinamEnricher.name: HaziHinamEnricher,
     RamiLeviEnricher.name: RamiLeviEnricher,
+    ShufersalEnricher.name: ShufersalEnricher,
+    YochananofEnricher.name: YochananofEnricher,
 }
 
 
