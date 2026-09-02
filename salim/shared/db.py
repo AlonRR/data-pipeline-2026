@@ -25,11 +25,35 @@ def database_url() -> str:
     value = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL).strip()
     if not value:
         raise RuntimeError("DATABASE_URL is empty")
-    return value
+    return _escape_unencoded_password_at(value)
+
+
+def _escape_unencoded_password_at(value: str) -> str:
+    """Encode extra ``@`` characters in URL credentials without exposing them.
+
+    Supabase passwords may contain ``@``. The final ``@`` in the authority is
+    the user-info/host delimiter; any earlier ones belong to the password.
+    Already encoded ``%40`` values are left unchanged.
+    """
+    scheme_end = value.find("://")
+    if scheme_end < 0:
+        return value
+    authority_start = scheme_end + 3
+    authority_end = len(value)
+    for separator in ("/", "?", "#"):
+        index = value.find(separator, authority_start)
+        if index >= 0:
+            authority_end = min(authority_end, index)
+    authority = value[authority_start:authority_end]
+    if authority.count("@") <= 1:
+        return value
+    credentials, delimiter, host = authority.rpartition("@")
+    normalized_authority = f"{credentials.replace('@', '%40')}{delimiter}{host}"
+    return f"{value[:authority_start]}{normalized_authority}{value[authority_end:]}"
 
 
 def make_engine(url: str | None = None) -> Engine:
-    value = url.strip() if url is not None else database_url()
+    value = _escape_unencoded_password_at(url.strip()) if url is not None else database_url()
     try:
         parsed = make_url(value)
     except ArgumentError as exc:

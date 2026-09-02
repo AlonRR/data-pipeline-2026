@@ -12,6 +12,21 @@ class DatabaseUrlTest(unittest.TestCase):
             self.assertEqual(database_url(), value)
             self.assertEqual(make_engine().url.render_as_string(hide_password=False), value)
 
+    def test_encodes_raw_at_sign_in_password(self):
+        raw = "postgresql+psycopg2://postgres.project:abc@6@pooler.example.com:6543/postgres?sslmode=require"
+        with patch.dict(os.environ, {"DATABASE_URL": raw}):
+            engine = make_engine()
+        self.assertEqual(engine.url.username, "postgres.project")
+        self.assertEqual(engine.url.password, "abc@6")
+        self.assertEqual(engine.url.host, "pooler.example.com")
+
+    def test_preserves_already_encoded_at_sign(self):
+        encoded = "postgresql+psycopg2://postgres.project:abc%406@pooler.example.com:6543/postgres"
+        with patch.dict(os.environ, {"DATABASE_URL": encoded}):
+            engine = make_engine()
+        self.assertEqual(engine.url.password, "abc@6")
+        self.assertEqual(engine.url.host, "pooler.example.com")
+
     def test_rejects_empty_secret(self):
         with patch.dict(os.environ, {"DATABASE_URL": "  \n"}):
             with self.assertRaisesRegex(RuntimeError, "DATABASE_URL is empty"):
