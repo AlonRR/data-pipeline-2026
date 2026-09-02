@@ -21,7 +21,7 @@ jobs:
         working-directory: salim
     env:
       RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
-      RABBITMQ_QUEUE: raw-prices
+      RABBITMQ_QUEUE: prices-q
       DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
       LOADER_EXIT_AFTER_IDLE_SECONDS: "30"
       PYTHONPATH: .

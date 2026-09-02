@@ -1,7 +1,7 @@
 """Queue message -> typed record. The one place that knows the extractor's JSON.
 
 Both extractor outputs (``Prices.py`` and ``promotions.py``) land on the same
-``raw-prices`` queue, so the shape is decided per message: a ``promotionId``
+``prices-q`` queue, so the shape is decided per message: a ``promotionId``
 means a promotion, ``itemCode`` + ``price`` means a price item, anything else
 is poison and raises ``InvalidMessage`` so the consumer can dead-letter it.
 """
@@ -35,8 +35,8 @@ class PriceMessage:
     quantity: Decimal | None
     weighted: bool | None
     in_package: Decimal | None
-    price: Decimal | None
-    update_time: datetime | None
+    price: Decimal
+    update_time: datetime
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class PromotionMessage:
     description: str | None
     start_time: datetime | None
     end_time: datetime | None
-    update_time: datetime | None
+    update_time: datetime
     items: list[PromotionItemMessage] = field(default_factory=list)
 
 
@@ -84,8 +84,8 @@ def _price(p: dict) -> PriceMessage:
         quantity=_decimal(p.get("quantity")),
         weighted=_bool(p.get("weighted")),
         in_package=_decimal(p.get("inPackage")),
-        price=_decimal(p.get("price")),
-        update_time=_timestamp(p.get("updateTime")),
+        price=_required_decimal(p, "price"),
+        update_time=_required_timestamp(p, "updateTime"),
     )
 
 
@@ -103,7 +103,7 @@ def _promotion(p: dict) -> PromotionMessage:
         description=_text(p.get("description")),
         start_time=_timestamp(p.get("startTime")),
         end_time=_timestamp(p.get("endTime")),
-        update_time=_timestamp(p.get("updateTime")),
+        update_time=_required_timestamp(p, "updateTime"),
         items=[_promotion_item(i) for i in raw_items],
     )
 
@@ -123,6 +123,20 @@ def _required(p: dict, key: str) -> str:
     value = _text(p.get(key))
     if value is None:
         raise InvalidMessage(f"missing required field {key!r}")
+    return value
+
+
+def _required_decimal(p: dict, key: str) -> Decimal:
+    value = _decimal(p.get(key))
+    if value is None:
+        raise InvalidMessage(f"missing or invalid required decimal field {key!r}")
+    return value
+
+
+def _required_timestamp(p: dict, key: str) -> datetime:
+    value = _timestamp(p.get(key))
+    if value is None:
+        raise InvalidMessage(f"missing or invalid required timestamp field {key!r}")
     return value
 
 

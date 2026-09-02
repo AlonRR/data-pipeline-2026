@@ -70,6 +70,12 @@ class ParseMessageTest(unittest.TestCase):
         with self.assertRaises(InvalidMessage):
             parse_message(bad)
 
+    def test_price_requires_price_and_source_timestamp(self):
+        for bad in (dict(PRICE, price="bad"), dict(PRICE, updateTime=None)):
+            with self.subTest(bad=bad):
+                with self.assertRaises(InvalidMessage):
+                    parse_message(bad)
+
     def test_unknown_shape_is_invalid(self):
         with self.assertRaises(InvalidMessage):
             parse_message({"hello": "world"})

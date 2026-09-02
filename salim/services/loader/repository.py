@@ -21,12 +21,16 @@ from shared.models import (
     MANUFACTURER_PENDING,
     MANUFACTURER_RESOLVED,
     MANUFACTURER_UNKNOWN,
+    CatalogProduct,
     Chain,
     Manufacturer,
     Price,
+    PriceHistory,
     Product,
     Promotion,
+    PromotionHistory,
     PromotionItem,
+    PromotionItemHistory,
 )
 
 T = TypeVar("T")
@@ -56,6 +60,33 @@ class Repository:
         by_price = _newest(messages, lambda m: (m.provider, m.store_id, m.item_code))
         if not by_product:
             return
+
+        catalog_rows: dict[str, dict] = {}
+        for message in by_product.values():
+            product_id = _catalog_product_id(message)
+            row = {
+                "product_id": product_id,
+                "gtin": message.item_code if message.item_type == 1 else None,
+                "display_name": message.item_name,
+                "source_update_time": message.update_time,
+            }
+            previous = catalog_rows.get(product_id)
+            if previous is None or message.update_time >= previous["source_update_time"]:
+                catalog_rows[product_id] = row
+        catalog_stmt = insert(CatalogProduct).values(list(catalog_rows.values()))
+        catalog_excluded = catalog_stmt.excluded
+        self.session.execute(
+            catalog_stmt.on_conflict_do_update(
+                index_elements=[CatalogProduct.product_id],
+                set_={
+                    "gtin": func.coalesce(catalog_excluded.gtin, CatalogProduct.gtin),
+                    "display_name": func.coalesce(catalog_excluded.display_name, CatalogProduct.display_name),
+                    "source_update_time": catalog_excluded.source_update_time,
+                    "updated_at": func.now(),
+                },
+                where=_not_older(CatalogProduct.source_update_time, catalog_excluded.source_update_time),
+            )
+        )
 
         product_rows = [self._product_row(m, manufacturers.get(key)) for key, m in by_product.items()]
         stmt = insert(Product).values(product_rows)
@@ -88,6 +119,21 @@ class Repository:
         )
         self.session.execute(stmt)
 
+        history_messages = {
+            (m.provider, m.store_id, m.item_code, m.update_time): m for m in messages
+        }.values()
+        history_rows = [
+            {
+                "provider": m.provider,
+                "store_id": m.store_id,
+                "item_code": m.item_code,
+                "price": m.price,
+                "update_time": m.update_time,
+            }
+            for m in history_messages
+        ]
+        self.session.execute(insert(PriceHistory).values(history_rows).on_conflict_do_nothing())
+
         price_rows = [
             {"provider": m.provider, "store_id": m.store_id, "item_code": m.item_code, "price": m.price, "update_time": m.update_time}
             for m in by_price.values()
@@ -112,6 +158,7 @@ class Repository:
         return {
             "provider": m.provider,
             "item_code": m.item_code,
+            "catalog_product_id": _catalog_product_id(m),
             "item_name": m.item_name,
             "item_type": m.item_type,
             "unit_quantity": m.unit_quantity,
@@ -128,8 +175,44 @@ class Repository:
 
     # -------------------------------------------------------------- promotions
     def upsert_promotions(self, messages: Iterable[PromotionMessage]) -> None:
+        messages = list(messages)
+        history_messages = {
+            (m.provider, m.store_id, m.promotion_id, m.update_time): m for m in messages
+        }.values()
+        for message in history_messages:
+            self._insert_promotion_history(message)
         for m in _newest(messages, lambda m: (m.provider, m.store_id, m.promotion_id)).values():
             self._upsert_promotion(m)
+
+    def _insert_promotion_history(self, m: PromotionMessage) -> None:
+        history_stmt = insert(PromotionHistory).values(
+            provider=m.provider,
+            store_id=m.store_id,
+            promotion_id=m.promotion_id,
+            update_time=m.update_time,
+            description=m.description,
+            start_time=m.start_time,
+            end_time=m.end_time,
+        ).on_conflict_do_nothing()
+        history_written = self.session.execute(history_stmt.returning(PromotionHistory.promotion_id)).first() is not None
+        if history_written and m.items:
+            self.session.execute(
+                insert(PromotionItemHistory).values([
+                    {
+                        "provider": m.provider,
+                        "store_id": m.store_id,
+                        "promotion_id": m.promotion_id,
+                        "update_time": m.update_time,
+                        "item_code": item.item_code,
+                        "discount_type": item.discount_type,
+                        "min_qty": item.min_qty,
+                        "max_qty": item.max_qty,
+                        "discount_price": item.discount_price,
+                        "discounted_price_per_mida": item.discounted_price_per_mida,
+                    }
+                    for item in {item.item_code: item for item in m.items}.values()
+                ])
+            )
 
     def _upsert_promotion(self, m: PromotionMessage) -> None:
         stmt = insert(Promotion).values(
@@ -260,3 +343,10 @@ class Repository:
 def _not_older(existing, incoming):
     """Row-level guard: only apply a publication at least as new as what is stored."""
     return (existing.is_(None)) | ((incoming.isnot(None)) & (incoming >= existing))
+
+
+def _catalog_product_id(message: PriceMessage) -> str:
+    """Stable API identity: GTINs cross chains; internal SKUs remain chain-scoped."""
+    if message.item_type == 1:
+        return f"gtin:{message.item_code}"
+    return f"chain:{message.provider}:{message.item_code}"

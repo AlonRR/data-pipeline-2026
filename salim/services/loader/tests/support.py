@@ -14,7 +14,22 @@ from shared.models import Base
 
 URL = os.environ.get("TEST_DATABASE_URL")
 
-_TABLES = ("promotion_items", "promotions", "prices", "products", "manufacturers")
+_TABLES = (
+    "promotion_item_history",
+    "promotion_history",
+    "promotion_items",
+    "promotions",
+    "price_history",
+    "prices",
+    "products",
+    "product_aliases",
+    "catalog_products",
+    "manufacturers",
+    "branch_opening_exceptions",
+    "branch_opening_hours",
+    "branches",
+    "chains",
+)
 
 
 @unittest.skipUnless(URL, "TEST_DATABASE_URL not set")

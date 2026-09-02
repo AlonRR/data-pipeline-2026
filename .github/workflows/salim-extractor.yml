@@ -24,7 +24,7 @@ jobs:
       RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
       S3_BUCKET: ${{ vars.S3_BUCKET || 'SalimPrices' }}
       S3_REGION: ${{ vars.S3_REGION || 'us-east-1' }}
-      RABBITMQ_QUEUE: ${{ vars.RABBITMQ_QUEUE || 'raw-prices' }}
+      RABBITMQ_QUEUE: ${{ vars.RABBITMQ_QUEUE || 'prices-q' }}
       EXTRACTOR_BATCH_SIZE: ${{ vars.EXTRACTOR_BATCH_SIZE || '30' }}
       EXTRACTOR_PUBLISH_BATCH_SIZE: ${{ vars.EXTRACTOR_PUBLISH_BATCH_SIZE || '500' }}
       LOG_LEVEL: INFO

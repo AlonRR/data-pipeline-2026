@@ -3,12 +3,23 @@ import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from messages import PriceMessage, PromotionItemMessage, PromotionMessage
 from enrichment import Resolution
 from repository import Repository
-from shared.models import Manufacturer, Price, Product, Promotion, PromotionItem
+from shared.models import (
+    Branch,
+    CatalogProduct,
+    Manufacturer,
+    Price,
+    PriceHistory,
+    Product,
+    Promotion,
+    PromotionHistory,
+    PromotionItem,
+    PromotionItemHistory,
+)
 from tests.support import PostgresTestCase
 
 
@@ -53,6 +64,9 @@ class RepositoryTest(PostgresTestCase):
         self.assertEqual(product.manufacturer_status, "resolved")
         row = self.session.get(Price, ("7290", "001", "111"))
         self.assertEqual(row.price, Decimal("6.90"))
+        self.assertEqual(self.session.get(PriceHistory, ("7290", "001", "111", price().update_time)).price, Decimal("6.90"))
+        self.assertIsNotNone(self.session.get(CatalogProduct, "gtin:111"))
+        self.assertIsNone(self.session.get(Branch, ("7290", "001")))
 
     def test_unresolved_manufacturer_is_pending(self):
         self.repo.upsert_prices([price()], manufacturers={})
@@ -70,6 +84,8 @@ class RepositoryTest(PostgresTestCase):
         product = self.session.get(Product, ("7290", "111"))
         self.assertEqual(product.item_name, "new name")
         self.assertEqual(product.source_update_time, newer.update_time)
+        history = self.session.scalars(select(PriceHistory).order_by(PriceHistory.update_time)).all()
+        self.assertEqual([row.price for row in history], [Decimal("6.00"), Decimal("7.50")])
 
     def test_resolved_manufacturer_is_not_reset_by_later_message(self):
         self.repo.upsert_prices([price()], manufacturers={("7290", "111"): Resolution("תנובה", "dictionary")})
@@ -90,6 +106,8 @@ class RepositoryTest(PostgresTestCase):
         codes = self.session.scalars(select(PromotionItem.item_code)).all()
         self.assertEqual(codes, ["333"])
         self.assertEqual(self.session.get(Promotion, ("7290", "001", "p1")).update_time.day, 18)
+        self.assertEqual(self.session.scalar(select(func.count()).select_from(PromotionHistory)), 2)
+        self.assertEqual(self.session.scalar(select(func.count()).select_from(PromotionItemHistory)), 3)
 
     def test_stale_promotion_is_ignored_entirely(self):
         self.repo.upsert_promotions([promotion()])

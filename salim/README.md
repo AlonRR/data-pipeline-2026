@@ -76,9 +76,9 @@ docker compose up --build
 - **extractor worker** — every three hours, paginates through `SalimPrices`,
   downloads only objects above each store's watermark, runs
   `prices.py`/`promotions.py`, and publishes persistent JSON messages to
-  `raw-prices`. It records `<store>_extractor_last_poll_time` as a JSON object
+  `prices-q`. It records `<store>_extractor_last_poll_time` as a JSON object
   in S3 only after RabbitMQ confirms all messages. Source objects are retained.
-- **loader** — consumes `raw-prices` in batches, upserts price items into
+- **loader** — consumes `prices-q` in batches, upserts price items into
   `products` + `prices` and promotions into `promotions` + `promotion_items`,
   and fills in each product's manufacturer. See
   [Loader and enricher](#loader-and-enricher).
@@ -87,7 +87,7 @@ docker compose up --build
 ## Loader and enricher
 
 The loader (`services/loader/`) is the queue consumer.
-Both extractor outputs land on the same `raw-prices` queue, so each message is dispatched by shape:
+Both extractor outputs land on the same `prices-q` queue, so each message is dispatched by shape:
 a `promotionId` means a promotion, `itemCode` + `price` means a price item, anything else is poison.
 
 **Tables.**
@@ -97,15 +97,29 @@ There is no migration tool yet, so a column change on a live database is a manua
 | Table | Key | Holds |
 |---|---|---|
 | `chains` | `chain_id` | ChainId → display name, seeded from `chains.py` |
-| `products` | `(provider, item_code)` | name, unit fields, source timestamp, and the manufacturer with its `manufacturer_status` (`pending` / `resolved` / `unknown`) |
+| `branches` | `(chain_id, branch_id)` | store name, city, address, location, timezone and active state |
+| `branch_opening_hours` | `(chain_id, branch_id, weekday, interval_index)` | regular weekly opening intervals |
+| `branch_opening_exceptions` | `(chain_id, branch_id, date, interval_index)` | holiday and exceptional opening/closure intervals |
+| `catalog_products` | `product_id` | canonical cross-chain product, GTIN, API slug and display name |
+| `product_aliases` | `alias` | API aliases such as `cola_zero` mapped to a canonical product |
+| `products` | `(provider, item_code)` | chain SKU mapped to a canonical product, with source metadata and manufacturer status |
 | `prices` | `(provider, store_id, item_code)` | current price and the source `update_time` |
+| `price_history` | `(provider, store_id, item_code, update_time)` | append-only price observations and ingestion time |
 | `promotions` | `(provider, store_id, promotion_id)` | description and validity window |
 | `promotion_items` | `(…, item_code)` | per-item deal terms; replaced wholesale when the promotion is upserted |
+| `promotion_history` | `(provider, store_id, promotion_id, update_time)` | append-only promotion versions |
+| `promotion_item_history` | `(…, update_time, item_code)` | items and deal terms for each historical version |
 | `manufacturers` | normalized item name | resolution cache and audit log (`source` is `dictionary`, `llm` or `manual`) |
 
 `provider` is the numeric `ChainId` from the XML, everywhere.
+The loader never creates or updates `branches`, `branch_opening_hours`,
+`branch_opening_exceptions`, or human-friendly `product_aliases`; those belong
+to separate metadata/catalog pipelines. Price and promotion facts deliberately
+do not have a branch foreign key, so `prices-q` can be consumed before metadata
+for a branch arrives. API queries join facts to the independently maintained
+branch tables and omit or flag branches whose metadata is not ready.
 Every write is an idempotent upsert, and a row's `update_time` never goes backwards, so redelivered or out-of-order messages are harmless.
-Poison messages are copied to `raw-prices.dlq` (with an `x-reason` header) and acked; anything else that fails nacks the whole batch back for redelivery.
+Poison messages are copied to `prices-q.dlq` (with an `x-reason` header) and acked; anything else that fails nacks the whole batch back for redelivery.
 All tables have row-level security enabled without public Data API policies;
 the backend services use the privileged Postgres connection directly.
 
@@ -161,7 +175,7 @@ variable. See `.env.example` for optional tuning variables.
 ### Loader on GitHub Actions
 
 The `Load queue into Supabase` workflow runs every five minutes and can also
-be started manually. It drains `raw-prices` in batches, exits after the queue
+be started manually. It drains `prices-q` in batches, exits after the queue
 has been idle for 30 seconds, and has a 15-minute safety timeout. If the runner
 is stopped mid-batch, RabbitMQ redelivers those messages because the loader only
 acknowledges them after the database transaction commits.

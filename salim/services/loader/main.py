@@ -1,4 +1,4 @@
-"""Loader service: consume the raw-prices queue in batches and upsert into Postgres.
+"""Loader service: consume the prices-q queue in batches and upsert into Postgres.
 
 Delivery is at-least-once and every write is an idempotent upsert, so the
 ack rule is simply: commit first, ack after. Messages that can never load
@@ -30,7 +30,7 @@ from shared.db import init_db, make_engine, make_session_factory
 log = logging.getLogger("salim.loader")
 
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
-QUEUE = os.environ.get("RABBITMQ_QUEUE", "raw-prices")
+QUEUE = os.environ.get("RABBITMQ_QUEUE", "prices-q")
 DLQ = f"{QUEUE}.dlq"
 BATCH_SIZE = int(os.environ.get("LOADER_BATCH_SIZE", "200"))
 BATCH_WAIT_SECONDS = float(os.environ.get("LOADER_BATCH_WAIT_SECONDS", "2"))
