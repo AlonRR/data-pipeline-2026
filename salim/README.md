@@ -132,6 +132,14 @@ To point at another endpoint that speaks the Anthropic Messages API (a proxy, or
 To swap providers entirely, implement the two-line `Resolver` protocol in `enrich.py` (`model` attribute plus `resolve(batch) -> {id: manufacturer | None}`) and hand it to `run_backfill`; the tests use exactly that hook with a fake.
 The API is billed from Console credits, separately from a claude.ai subscription; the key alone is not enough.
 
+**Tests** (unit tests always run; the DB-backed ones need a Postgres and skip otherwise):
+
+```bash
+cd salim/services/loader
+TEST_DATABASE_URL=postgresql+psycopg2://salim:salim@localhost:5432/salim \
+  PYTHONPATH=../.. python -m unittest discover -s tests -t .
+```
+
 ## Deploying to production
 
 Each of `crawler/`, `services/extractor/`, `services/loader/`, and `api/` has its
