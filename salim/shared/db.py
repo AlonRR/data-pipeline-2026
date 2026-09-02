@@ -31,3 +31,13 @@ def make_session_factory(engine: Engine) -> sessionmaker:
 
 def init_db(engine: Engine) -> None:
     Base.metadata.create_all(engine)
+    # Supabase exposes the public schema through its Data API. Keep every table
+    # closed to API roles by default; this service writes through the privileged
+    # Postgres connection and does not need an anon/authenticated RLS policy.
+    with engine.begin() as connection:
+        preparer = engine.dialect.identifier_preparer
+        for table in Base.metadata.sorted_tables:
+            table_name = preparer.quote(table.name)
+            if table.schema:
+                table_name = f"{preparer.quote_schema(table.schema)}.{table_name}"
+            connection.exec_driver_sql(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")

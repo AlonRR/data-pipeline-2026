@@ -99,6 +99,8 @@ There is no migration tool yet, so a column change on a live database is a manua
 `provider` is the numeric `ChainId` from the XML, everywhere.
 Every write is an idempotent upsert, and a row's `update_time` never goes backwards, so redelivered or out-of-order messages are harmless.
 Poison messages are copied to `raw-prices.dlq` (with an `x-reason` header) and acked; anything else that fails nacks the whole batch back for redelivery.
+All tables have row-level security enabled without public Data API policies;
+the backend services use the privileged Postgres connection directly.
 
 **Manufacturer enrichment** runs in two tiers.
 The consumer only does what costs nothing, in order: the XML's own `ManufactureName` (unless it is a placeholder like `לא ידוע`) → the `manufacturers` cache → a whole-token match against the seed brand dictionary (`brands.py`; a name mentioning two brands is treated as ambiguous).
@@ -130,3 +132,24 @@ own `Dockerfile` and is meant to be deployed as an independent Render.com servic
 (background worker for crawler/extractor/loader, web service for api), pointed at
 the real Supabase Storage bucket, CloudAMQP instance, and Supabase Postgres
 connection string via environment variables — no code changes needed.
+
+### Loader on GitHub Actions
+
+The `Load queue into Supabase` workflow runs every five minutes and can also
+be started manually. It drains `raw-prices` in batches, exits after the queue
+has been idle for 30 seconds, and has a 15-minute safety timeout. If the runner
+is stopped mid-batch, RabbitMQ redelivers those messages because the loader only
+acknowledges them after the database transaction commits.
+
+Configure these repository secrets under **Settings → Secrets and variables →
+Actions**:
+
+- `RABBITMQ_URL`: the CloudAMQP AMQPS connection URL.
+- `SUPABASE_DATABASE_URL`: the Supabase Postgres connection string. Prefer the
+  transaction pooler URL (port 6543) for this short-lived scheduled job and add
+  `+psycopg2` to the scheme, for example
+  `postgresql+psycopg2://...:...@...pooler.supabase.com:6543/postgres`.
+
+Do not commit either connection string. Scheduled workflows only run from the
+repository's default branch, so merge the workflow before expecting the cron
+trigger to fire.

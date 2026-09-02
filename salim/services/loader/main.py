@@ -8,7 +8,8 @@ whole batch back for redelivery.
 
 Expected env vars: RABBITMQ_URL, RABBITMQ_QUEUE, DATABASE_URL.
 Optional: LOADER_BATCH_SIZE (200), LOADER_BATCH_WAIT_SECONDS (2),
-LOADER_CACHE_REFRESH_SECONDS (600), LOG_LEVEL.
+LOADER_CACHE_REFRESH_SECONDS (600), LOADER_EXIT_AFTER_IDLE_SECONDS (disabled),
+LOG_LEVEL.
 """
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ BATCH_SIZE = int(os.environ.get("LOADER_BATCH_SIZE", "200"))
 BATCH_WAIT_SECONDS = float(os.environ.get("LOADER_BATCH_WAIT_SECONDS", "2"))
 # The sweeper writes new manufacturer answers behind the consumer's back.
 CACHE_REFRESH_SECONDS = float(os.environ.get("LOADER_CACHE_REFRESH_SECONDS", "600"))
+EXIT_AFTER_IDLE_SECONDS = float(os.environ.get("LOADER_EXIT_AFTER_IDLE_SECONDS", "0"))
 RECONNECT_DELAY_SECONDS = 5
 
 
@@ -54,6 +56,7 @@ def consume_forever(processor: BatchProcessor) -> None:
     while True:
         try:
             _consume(processor)
+            return
         except pika.exceptions.AMQPError as exc:
             log.warning("RabbitMQ connection or channel failed (%s); reconnecting in %ss", exc, RECONNECT_DELAY_SECONDS)
             time.sleep(RECONNECT_DELAY_SECONDS)
@@ -69,12 +72,24 @@ def _consume(processor: BatchProcessor) -> None:
 
     batch: list[tuple[int, bytes]] = []
     cache_refreshed_at = time.monotonic()
+    last_message_at = time.monotonic()
     for method, _properties, body in channel.consume(QUEUE, inactivity_timeout=BATCH_WAIT_SECONDS):
         if method is not None:
             batch.append((method.delivery_tag, body))
+            last_message_at = time.monotonic()
         if batch and (method is None or len(batch) >= BATCH_SIZE):
             _handle_batch(channel, processor, batch)
             batch = []
+        if (
+            method is None
+            and not batch
+            and EXIT_AFTER_IDLE_SECONDS > 0
+            and time.monotonic() - last_message_at >= EXIT_AFTER_IDLE_SECONDS
+        ):
+            log.info("queue idle for %.1fs; exiting", EXIT_AFTER_IDLE_SECONDS)
+            channel.cancel()
+            connection.close()
+            return
         if time.monotonic() - cache_refreshed_at > CACHE_REFRESH_SECONDS:
             processor.refresh_cache()
             cache_refreshed_at = time.monotonic()
