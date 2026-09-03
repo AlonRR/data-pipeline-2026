@@ -60,8 +60,18 @@ class SourceResult:
 class StoreSource(ABC):
     """A chain's store list. Subclasses implement ``fetch`` only."""
 
-    #: unique key; also the value written to ``stores.provider``
+    #: unique key for config and logs — the crawler's spelling of the chain
     name: str
+
+    #: The numeric ``ChainId`` this chain writes into its own files, e.g.
+    #: ``"7290027600007"``. ``branches`` is keyed on it and ``prices.provider``
+    #: carries the same value, so it is what makes the two join.
+    #:
+    #: Declared here rather than read from the parsed file so the enrichment
+    #: half has a key even when this run's sync failed or was skipped — and so
+    #: a file published under the wrong ChainId is caught instead of silently
+    #: creating a second set of branches.
+    chain_id: str
 
     @abstractmethod
     def fetch(self) -> SourceResult:

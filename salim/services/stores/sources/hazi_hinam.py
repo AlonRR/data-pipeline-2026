@@ -33,6 +33,7 @@ _MAX_PAGES = 15
 
 class HaziHinamStoreSource(StoreSource):
     name = "hazi_hinam"
+    chain_id = "7290700100008"
 
     def fetch(self) -> SourceResult:
         session = requests.Session()
@@ -58,7 +59,8 @@ class HaziHinamStoreSource(StoreSource):
 
         blob = session.get(url, timeout=60)
         blob.raise_for_status()
-        records = parse_stores_xml(blob.content, provider=self.name, source_file=name)
+        records = parse_stores_xml(blob.content, provider=self.name, source_file=name,
+                                  expected_chain_id=self.chain_id)
         return SourceResult(records=records, source_file=name)
 
 

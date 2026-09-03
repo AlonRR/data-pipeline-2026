@@ -114,5 +114,6 @@ class CerberusStoreSource(StoreSource):
 
         resp = session.get(f"{BASE_URL}/file/d/{newest}", timeout=60)
         resp.raise_for_status()
-        records = parse_stores_xml(resp.content, provider=self.name, source_file=newest)
+        records = parse_stores_xml(resp.content, provider=self.name, source_file=newest,
+                                  expected_chain_id=self.chain_id)
         return SourceResult(records=records, source_file=newest)

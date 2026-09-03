@@ -27,6 +27,7 @@ _HREF_RE = re.compile(r'href="([^"]*Stores[^"]*)"', re.IGNORECASE)
 
 class ShufersalStoreSource(StoreSource):
     name = "shufersal"
+    chain_id = "7290027600007"
 
     def fetch(self) -> SourceResult:
         session = requests.Session()
@@ -46,7 +47,8 @@ class ShufersalStoreSource(StoreSource):
 
         blob = session.get(url, timeout=60)
         blob.raise_for_status()
-        records = parse_stores_xml(blob.content, provider=self.name, source_file=name)
+        records = parse_stores_xml(blob.content, provider=self.name, source_file=name,
+                                  expected_chain_id=self.chain_id)
         return SourceResult(records=records, source_file=name)
 
 

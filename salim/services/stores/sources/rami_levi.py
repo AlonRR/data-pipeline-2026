@@ -10,4 +10,5 @@ from sources.cerberus import CerberusStoreSource
 
 class RamiLeviStoreSource(CerberusStoreSource):
     name = "rami_levi"
+    chain_id = "7290058140886"
     user_name = "RamiLevi"

@@ -51,8 +51,20 @@ def _first(fields: dict[str, str], *names: str) -> str | None:
     return None
 
 
-def parse_stores_xml(blob: bytes, provider: str, source_file: str | None = None) -> list[StoreRecord]:
-    """Parse a raw (optionally gzipped) Stores file into normalized records."""
+def parse_stores_xml(
+    blob: bytes,
+    provider: str,
+    source_file: str | None = None,
+    expected_chain_id: str | None = None,
+) -> list[StoreRecord]:
+    """Parse a raw (optionally gzipped) Stores file into normalized records.
+
+    ``chain_id`` is half the primary key of ``branches``, so a file without one
+    is refused rather than parsed into rows that cannot be written. When
+    ``expected_chain_id`` is given it is checked too: a chain publishing under
+    an unexpected id would otherwise create a whole second set of branches that
+    nothing joins to.
+    """
     root = ET.parse(io.BytesIO(_decompress(blob))).getroot()
 
     # ChainID lives at the top of the document, not on each store.
@@ -61,6 +73,17 @@ def parse_stores_xml(blob: bytes, provider: str, source_file: str | None = None)
         if element.tag.lower() == "chainid" and (element.text or "").strip():
             chain_id = element.text.strip()
             break
+
+    if not chain_id:
+        raise ValueError(
+            f"{source_file or 'Stores file'} for {provider} carries no ChainId; "
+            "it is half the branches primary key and cannot be defaulted"
+        )
+    if expected_chain_id and chain_id != expected_chain_id:
+        raise ValueError(
+            f"{source_file or 'Stores file'} for {provider} declares ChainId "
+            f"{chain_id}, expected {expected_chain_id}"
+        )
 
     records: list[StoreRecord] = []
     for element in root.iter():
