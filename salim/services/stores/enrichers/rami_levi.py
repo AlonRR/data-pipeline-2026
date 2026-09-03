@@ -97,6 +97,10 @@ def _parse_hours(raw: str) -> dict[str, dict | None]:
 class RamiLeviEnricher(Enricher):
     name = "rami_levi"
 
+    # Measured 3 Sept 2026 over 97 branches: the locator page publishes no
+    # coordinates for any of them.
+    provides = frozenset({"name", "address", "city", "phone", "opening_hours"})
+
     def fetch(self) -> list[LocatorRecord]:
         resp = requests.get(PAGE_URL, headers=HEADERS, timeout=45)
         resp.raise_for_status()

@@ -94,6 +94,12 @@ class Branch(Base):
     # facts still hold for those; opening hours do not.
     enrichment_match = Column(String(16))
     enriched_at = Column(DateTime(timezone=True))
+    # Fields this chain's locator does not publish at all, e.g. ["phone"] for
+    # Yochananof or ["opening_hours"] for Shufersal. Without it a null column
+    # means three different things at once: the source carries no such field,
+    # the source carries it but this branch is blank, or nobody has looked the
+    # branch up. `enriched_at` separates the third; this separates the first.
+    fields_not_provided = Column(JSONB)
 
     # --- lifecycle --- #
     # Derived from presence in the newest Stores file: a branch that stops

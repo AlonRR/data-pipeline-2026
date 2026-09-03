@@ -55,11 +55,32 @@ class LocatorRecord:
     opening_hours_raw: str | None = None
 
 
+#: Everything a locator can contribute to a branch row. A field outside this
+#: set cannot be declared in ``provides`` — a typo would otherwise mark a real
+#: column as permanently unavailable and nothing would notice.
+ENRICHABLE_FIELDS = frozenset(
+    {"name", "address", "city", "phone", "latitude", "longitude", "opening_hours"}
+)
+
+
 class Enricher(ABC):
     """A chain's branch locator. Subclasses implement ``fetch`` only."""
 
-    #: must equal the matching StoreSource's name (it keys `stores.provider`)
+    #: must equal the matching StoreSource's name (it keys the provider config)
     name: str
+
+    #: Which of ``ENRICHABLE_FIELDS`` this source can supply **at all**.
+    #: Coverage within a chain is always partial, so this is not "every branch
+    #: has one" — it is "this source publishes such a field with real values".
+    #: The complement is written to ``branches.fields_not_provided`` so a null
+    #: column can be told apart from one the source simply does not carry.
+    #: Measured against live responses rather than read off documentation.
+    provides: frozenset[str]
+
+    @classmethod
+    def not_provided(cls) -> list[str]:
+        """Fields this source will never supply, sorted for stable comparison."""
+        return sorted(ENRICHABLE_FIELDS - set(cls.provides))
 
     @abstractmethod
     def fetch(self) -> list[LocatorRecord]:

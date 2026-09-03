@@ -115,7 +115,12 @@ def _window(day: dict) -> dict | None:
 
 
 class YochananofEnricher(Enricher):
-    name = "yohananof"  # the crawler's spelling, which keys stores.provider
+    name = "yohananof"  # the crawler's spelling, which keys the provider config
+
+    # Measured 3 Sept 2026 over all 52 branches. `customerServicePhone` exists
+    # in the GraphQL schema but is null for every single one, so the field is
+    # declared unavailable rather than merely sparse.
+    provides = frozenset({"name", "address", "city", "latitude", "longitude", "opening_hours"})
 
     def fetch(self) -> list[LocatorRecord]:
         resp = requests.post(API_URL, headers=HEADERS, json={"query": QUERY}, timeout=60)

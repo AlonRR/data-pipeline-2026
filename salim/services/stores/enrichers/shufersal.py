@@ -97,6 +97,10 @@ def _branch_id(value: object) -> str | None:
 class ShufersalEnricher(Enricher):
     name = "shufersal"
 
+    # Measured 3 Sept 2026 over 723 retail rows. The Wix collection has no
+    # opening-hours field at all — not empty values, no such column.
+    provides = frozenset({"name", "address", "city", "phone", "latitude", "longitude"})
+
     def fetch(self) -> list[LocatorRecord]:
         session = requests.Session()
         session.headers.update(HEADERS)

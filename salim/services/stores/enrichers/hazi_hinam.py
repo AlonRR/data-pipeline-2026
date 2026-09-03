@@ -23,7 +23,7 @@ import logging
 
 import requests
 
-from enrichers.base import Enricher, LocatorRecord, day_name, flatten_hours
+from enrichers.base import ENRICHABLE_FIELDS, Enricher, LocatorRecord, day_name, flatten_hours
 
 log = logging.getLogger("salim.stores.enrich.hazi_hinam")
 
@@ -49,6 +49,10 @@ def _city_from(address: str | None) -> str | None:
 
 class HaziHinamEnricher(Enricher):
     name = "hazi_hinam"
+
+    # Measured 3 Sept 2026: the only locator of the four that supplies every
+    # field, coordinates included.
+    provides = frozenset(ENRICHABLE_FIELDS)
 
     def fetch(self) -> list[LocatorRecord]:
         resp = requests.get(API_URL, headers=HEADERS, timeout=30)
