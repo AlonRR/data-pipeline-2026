@@ -104,6 +104,44 @@ def _registration_for(crawler: CrawlerRegistration | type[Crawler]) -> CrawlerRe
     return CrawlerRegistration(name=name, crawler_cls=crawler)
 
 
+def selected_crawlers() -> list[CrawlerRegistration | type[Crawler]]:
+    """The crawlers this runner should attempt, from ``CRAWLER_PROVIDERS``.
+
+    Which chains are reachable depends on where the runner is, not on the code:
+    three of the sources below refuse GitHub's datacenter IP ranges outright,
+    while the same commit collects all of them from an Israeli IP. So the
+    hosted schedule narrows the set with this variable and a self-hosted runner
+    leaves it unset.
+
+    It is an allowlist rather than a skip-list on purpose. The workflow env
+    then reads as "what GitHub can actually reach", and a chain added upstream
+    later stays off the hosted schedule until someone confirms it works there —
+    which matters because one of the three failures is a page that parses to
+    zero links and reports success.
+
+    Unset or empty means every registered crawler; an unset Actions variable
+    arrives as "" rather than absent, so both have to mean the same thing.
+    """
+    wanted = os.environ.get("CRAWLER_PROVIDERS", "").strip()
+    if not wanted:
+        return CRAWLERS
+
+    names = [n.strip() for n in wanted.split(",") if n.strip()]
+    known = {_registration_for(c).name: c for c in CRAWLERS}
+    unknown = [n for n in names if n not in known]
+    if unknown:
+        # Skipping a misspelled name silently would drop a chain from the
+        # schedule while the job still reported success.
+        raise ValueError(
+            f"CRAWLER_PROVIDERS names unknown crawler(s): {', '.join(sorted(unknown))}. "
+            f"Known: {', '.join(sorted(known))}"
+        )
+
+    selected = set(names)
+    # Registration order, not the order they were listed in the variable.
+    return [c for c in CRAWLERS if _registration_for(c).name in selected]
+
+
 def run(crawlers: list[CrawlerRegistration | type[Crawler]] | None = None) -> dict[str, list[str]]:
     """Run every registered crawler once.
 
@@ -113,7 +151,7 @@ def run(crawlers: list[CrawlerRegistration | type[Crawler]] | None = None) -> di
     """
     infra = load_infra_config()
     results: dict[str, list[str]] = {}
-    for crawler in crawlers or CRAWLERS:
+    for crawler in crawlers if crawlers is not None else selected_crawlers():
         registration = _registration_for(crawler)
         name = registration.name
         try:
