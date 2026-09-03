@@ -1,5 +1,9 @@
 """ChainId -> display name, seeded into ``chains`` at startup (insert-if-missing).
 
+Shared by the loader and the stores service. ``branches.chain_id`` is a
+foreign key to ``chains``, so the stores service seeds these rows too rather
+than depending on the loader having run first.
+
 Values are the ``ChainId`` each chain writes into its price-transparency
 files. Victory publishes under two ids. A chain missing here still loads
 fine (``provider`` is not a foreign key); it just has no name until a row is
