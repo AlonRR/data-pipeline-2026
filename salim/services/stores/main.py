@@ -35,7 +35,7 @@ from enrichers.shufersal import ShufersalEnricher
 from enrichers.yochananof import YochananofEnricher
 from matching import match_stores
 from repository import apply_enrichment, deactivate_missing, upsert_stores
-from shared.db import get_session, init_db
+from shared.db import init_db, make_engine, make_session_factory
 from shared.models import Store
 from sources.hazi_hinam import HaziHinamStoreSource
 from sources.rami_levi import RamiLeviStoreSource
@@ -72,6 +72,22 @@ def selected_sources() -> list[type[StoreSource]]:
     return [s for s in SOURCES if s.name in names]
 
 
+_session_factory = None
+
+
+def _session():
+    """One session from the process-wide factory.
+
+    ``shared/db.py`` moved from a module-level engine to factories, so the
+    engine is built once here on first use rather than at import time — which
+    also keeps importing this module from opening a connection.
+    """
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = make_session_factory(make_engine())
+    return _session_factory()
+
+
 def sync_source(source: StoreSource) -> int:
     """Bring the table in line with this chain's newest Stores file."""
     result = source.fetch()
@@ -80,7 +96,7 @@ def sync_source(source: StoreSource) -> int:
     if skipped:
         log.info("%s: skipped %d non-branch record(s)", source.name, skipped)
 
-    with get_session() as session:
+    with _session() as session:
         written = upsert_stores(session, physical)
         deactivate_missing(session, source.name, {r.store_id for r in physical})
         session.commit()
@@ -93,7 +109,7 @@ def enrich_provider(provider: str, enricher: Enricher) -> dict[str, int]:
     """Fill in phone / hours / coordinates for one chain."""
     records = enricher.fetch()
 
-    with get_session() as session:
+    with _session() as session:
         stores = session.scalars(
             select(Store).where(Store.provider == provider, Store.is_active.is_(True))
         ).all()
@@ -111,7 +127,10 @@ def enrich_provider(provider: str, enricher: Enricher) -> dict[str, int]:
 
 
 def run() -> dict[str, dict]:
-    init_db()
+    engine = make_engine()
+    init_db(engine)
+    global _session_factory
+    _session_factory = make_session_factory(engine)
     skip_enrich = os.environ.get("STORES_SKIP_ENRICH") == "1"
     results: dict[str, dict] = {}
 

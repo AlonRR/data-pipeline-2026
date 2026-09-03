@@ -1,10 +1,10 @@
 import gzip
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from prices import parse_prices
 from promotions import parse_promotions
-from main import Checkpoint, parser_for
+from main import Checkpoint, Settings, parser_for, process_object
 
 
 PRICE_XML = b"""<Root><ChainId>1</ChainId><StoreId>2</StoreId><Items><Item>
@@ -37,6 +37,36 @@ class ParserTests(unittest.TestCase):
         self.assertTrue(checkpoint.contains("store/a", "2026-08-28T10:00:00+00:00"))
         self.assertFalse(checkpoint.contains("store/b", "2026-08-28T10:00:00+00:00"))
         self.assertFalse(checkpoint.contains("store/c", "2026-08-28T11:00:00+00:00"))
+
+    @patch("main.download", return_value=b"xml")
+    @patch("main.parser_for")
+    def test_publishes_records_in_transactions(self, parser_for_mock, _download_mock):
+        parser_for_mock.return_value = lambda _raw: iter({"itemCode": str(i)} for i in range(5))
+        channel = Mock(is_open=True)
+        checkpoint = Mock()
+        checkpoint.contains.return_value = False
+        settings = Settings(
+            rabbit_url="amqp://example",
+            output_queue="raw-prices",
+            bucket="SalimPrices",
+            poll_interval=1,
+            batch_size=30,
+            publish_batch_size=2,
+        )
+
+        count = process_object(
+            channel,
+            settings,
+            Mock(),
+            "store/PriceFull-test.gz",
+            "2026-08-29T10:00:00+00:00",
+            checkpoint,
+        )
+
+        self.assertEqual(count, 5)
+        self.assertEqual(channel.basic_publish.call_count, 5)
+        self.assertEqual(channel.tx_commit.call_count, 3)
+        checkpoint.save.assert_called_once()
 
 
 if __name__ == "__main__":

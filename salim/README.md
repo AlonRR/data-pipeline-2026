@@ -77,30 +77,95 @@ docker compose up --build
 - **extractor worker** — every three hours, paginates through `SalimPrices`,
   downloads only objects above each store's watermark, runs
   `prices.py`/`promotions.py`, and publishes persistent JSON messages to
-  `raw-prices`. It records `<store>_extractor_last_poll_time` as a JSON object
+  `prices-q`. It records `<store>_extractor_last_poll_time` as a JSON object
   in S3 only after RabbitMQ confirms all messages. Source objects are retained.
-- **loader** — consumes the `raw-prices` queue, normalizes/validates each message,
-  and upserts it into the `prices` table (plus `stores`/`products` lookup tables).
+- **loader** — consumes `prices-q` in batches, upserts price items into
+  `products` + `prices` and promotions into `promotions` + `promotion_items`,
+  and fills in each product's manufacturer. See
+  [Loader and enricher](#loader-and-enricher).
 - **stores** — syncs the `stores` table from each chain's mandated `Stores`
   publication (branch id, name, address) and flags branches that stopped being
   listed as inactive. Runs to completion and exits; see
   [services/stores/README.md](services/stores/README.md).
 - **api** — FastAPI service exposing read endpoints over the `prices` data.
 
-## Deploying to production
+## Loader and enricher
 
-For local worker verification:
+The loader (`services/loader/`) is the queue consumer.
+Both extractor outputs land on the same `prices-q` queue, so each message is dispatched by shape:
+a `promotionId` means a promotion, `itemCode` + `price` means a price item, anything else is poison.
+
+**Tables.**
+They are created with `create_all()` at startup.
+There is no migration tool yet, so a column change on a live database is a manual `ALTER`.
+
+| Table | Key | Holds |
+|---|---|---|
+| `chains` | `chain_id` | ChainId → display name, seeded from `chains.py` |
+| `branches` | `(chain_id, branch_id)` | store name, city, address, location, timezone and active state |
+| `branch_opening_hours` | `(chain_id, branch_id, weekday, interval_index)` | regular weekly opening intervals |
+| `branch_opening_exceptions` | `(chain_id, branch_id, date, interval_index)` | holiday and exceptional opening/closure intervals |
+| `catalog_products` | `product_id` | canonical cross-chain product, GTIN, API slug and display name |
+| `product_aliases` | `alias` | API aliases such as `cola_zero` mapped to a canonical product |
+| `products` | `(provider, item_code)` | chain SKU mapped to a canonical product, with source metadata and manufacturer status |
+| `prices` | `(provider, store_id, item_code)` | current price and the source `update_time` |
+| `price_history` | `(provider, store_id, item_code, update_time)` | append-only price observations and ingestion time |
+| `promotions` | `(provider, store_id, promotion_id)` | description and validity window |
+| `promotion_items` | `(…, item_code)` | per-item deal terms; replaced wholesale when the promotion is upserted |
+| `promotion_history` | `(provider, store_id, promotion_id, update_time)` | append-only promotion versions |
+| `promotion_item_history` | `(…, update_time, item_code)` | items and deal terms for each historical version |
+| `manufacturers` | normalized item name | resolution cache and audit log (`source` is `dictionary`, `llm` or `manual`) |
+
+`provider` is the numeric `ChainId` from the XML, everywhere.
+The loader never creates or updates `branches`, `branch_opening_hours`,
+`branch_opening_exceptions`, or human-friendly `product_aliases`; those belong
+to separate metadata/catalog pipelines. Price and promotion facts deliberately
+do not have a branch foreign key, so `prices-q` can be consumed before metadata
+for a branch arrives. API queries join facts to the independently maintained
+branch tables and omit or flag branches whose metadata is not ready.
+Every write is an idempotent upsert, and a row's `update_time` never goes backwards, so redelivered or out-of-order messages are harmless.
+Poison messages are copied to `prices-q.dlq` (with an `x-reason` header) and acked; anything else that fails nacks the whole batch back for redelivery.
+All tables have row-level security enabled without public Data API policies;
+the backend services use the privileged Postgres connection directly.
+
+**Manufacturer enrichment** runs in two tiers.
+The consumer only does what costs nothing, in order: the XML's own `ManufactureName` (unless it is a placeholder like `לא ידוע`) → the `manufacturers` cache → a whole-token match against the seed brand dictionary (`brands.py`; a name mentioning two brands is treated as ambiguous).
+Whatever falls through stays `pending`.
+The consumer reloads the cache every `LOADER_CACHE_REFRESH_SECONDS` (default 10 minutes) to pick up what the sweeper resolved.
+The sweeper, `enrich.py --backfill`, then sends pending names to `claude-haiku-4-5` in batches of 50 with a structured-output schema, marks each product `resolved` or `unknown`, and caches the answer so the same name is never asked twice, on any chain.
+It exits immediately when nothing is pending, and a failed request charges every name in that batch one attempt and ends the run (`ENRICHER_MAX_ATTEMPTS`, default 3), so an outage costs one request per run.
 
 ```bash
-cd salim
-docker compose up --build rabbitmq minio extractor
+docker compose run --rm loader-enrich                       # resolve pending products
+docker compose run --rm loader-enrich python enrich.py --reset-attempts   # retry exhausted names
+docker compose run --rm loader-enrich python enrich.py --reset-unknown    # re-ask "no manufacturer" answers
 ```
 
-The worker reads RabbitMQ credentials from `services/.env` when present. Set
-`EXTRACTOR_POLL_INTERVAL_SECONDS` to a smaller value for local iteration; the
-production default is `10800` seconds (three hours).
+Set `ANTHROPIC_API_KEY` in `.env`; the model is `ENRICHER_MODEL`.
+In production run the same command on a schedule (hourly is plenty).
 
-### GitHub Actions schedule
+The LLM is deliberately a thin seam.
+`enrich.py` builds one `anthropic.Anthropic()` client and calls `messages.create` with a system prompt, a JSON list of `{id, name}` and a JSON schema for the answer; nothing else about the pipeline knows a model exists.
+To change the model, set `ENRICHER_MODEL`.
+To point at another endpoint that speaks the Anthropic Messages API (a proxy, or a local server that emulates it), set `ANTHROPIC_BASE_URL`; the SDK reads it without code changes.
+To swap providers entirely, implement the two-line `Resolver` protocol in `enrich.py` (`model` attribute plus `resolve(batch) -> {id: manufacturer | None}`) and hand it to `run_backfill`; the tests use exactly that hook with a fake.
+The API is billed from Console credits, separately from a claude.ai subscription; the key alone is not enough.
+
+**Tests** (unit tests always run; the DB-backed ones need a Postgres and skip otherwise):
+
+```bash
+cd salim/services/loader
+TEST_DATABASE_URL=postgresql+psycopg2://salim:salim@localhost:5432/salim \
+  PYTHONPATH=../.. python -m unittest discover -s tests -t .
+```
+
+## Deploying to production
+
+Each of `crawler/`, `services/extractor/`, `services/loader/`, and `api/` has its
+own `Dockerfile`. Point each service at Supabase Storage, CloudAMQP, and Supabase
+Postgres through environment variables.
+
+### Extractor on GitHub Actions
 
 `.github/workflows/salim-extractor.yml` runs a single poll every six hours and
 can also be started manually. The first run for a store is a full backfill
@@ -108,19 +173,30 @@ because `<store>_extractor_last_poll_time` does not exist yet. Later runs read
 that checkpoint, process through the poll's start time, and update it only
 after RabbitMQ confirms the messages.
 
-Add these repository **Actions secrets**:
+The extractor requires the `SUPABASE_ACCESS_SECRET_KEY`, `S3_ENDPOINT_URL`, and
+`RABBITMQ_URL` repository secrets and the `SUPABASE_ACCESS_KEY_ID` repository
+variable. See `.env.example` for optional tuning variables.
 
-- `SUPABASE_ACCESS_SECRET_KEY`
-- `S3_ENDPOINT_URL`
-- `RABBITMQ_URL`
+### Loader on GitHub Actions
 
-Add these repository **Actions variables**:
+The `Load queue into Supabase` workflow is manual-only while production is
+being validated. It drains `prices-q` in batches, exits after the queue
+has been idle for 30 seconds, and has a 15-minute safety timeout. If the runner
+is stopped mid-batch, RabbitMQ redelivers those messages because the loader only
+acknowledges them after the database transaction commits.
 
-- `SUPABASE_ACCESS_KEY_ID`
+After a manual run is validated, uncomment the five-minute `schedule` block in
+`.github/workflows/load-queue-to-supabase.yml`.
 
-Optional repository **Actions variables** (defaults shown):
+Configure these repository secrets under **Settings → Secrets and variables →
+Actions**:
 
-- `S3_BUCKET=SalimPrices`
-- `S3_REGION=us-east-1`
-- `RABBITMQ_QUEUE=raw-prices`
-- `EXTRACTOR_BATCH_SIZE=30`
+- `RABBITMQ_URL`: the CloudAMQP AMQPS connection URL.
+- `SUPABASE_DATABASE_URL`: the Supabase Postgres connection string. Prefer the
+  transaction pooler URL (port 6543) for this short-lived scheduled job and add
+  `+psycopg2` to the scheme, for example
+  `postgresql+psycopg2://...:...@...pooler.supabase.com:6543/postgres`.
+
+Do not commit either connection string. Scheduled workflows only run from the
+repository's default branch, so merge the workflow before expecting the cron
+trigger to fire.

@@ -31,15 +31,20 @@ class Settings:
     bucket: str
     poll_interval: int
     batch_size: int
+    publish_batch_size: int
 
     @classmethod
     def from_env(cls):
         return cls(
             rabbit_url=os.environ["RABBITMQ_URL"],
-            output_queue=os.environ.get("RABBITMQ_QUEUE", "raw-prices"),
+            output_queue=os.environ.get("RABBITMQ_QUEUE", "prices-q"),
             bucket=os.environ.get("S3_BUCKET", "SalimPrices"),
             poll_interval=max(1, int(os.environ.get("EXTRACTOR_POLL_INTERVAL_SECONDS", "10800"))),
             batch_size=max(1, int(os.environ.get("EXTRACTOR_BATCH_SIZE", "30"))),
+            publish_batch_size=max(
+                1,
+                int(os.environ.get("EXTRACTOR_PUBLISH_BATCH_SIZE", "500")),
+            ),
         )
 
 
@@ -121,21 +126,45 @@ def process_object(
         return 0
 
     count = 0
-    for index, record in enumerate(parser(download(bucket, key, client=client))):
-        channel.basic_publish(
-            exchange="",
-            routing_key=settings.output_queue,
-            body=json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode(),
-            properties=pika.BasicProperties(
-                delivery_mode=pika.DeliveryMode.Persistent,
-                content_type="application/json",
-                message_id=f"{bucket}:{key}:{index}",
-                headers={"source_bucket": bucket, "source_key": key},
-            ),
-            mandatory=True,
-        )
-        count += 1
-    # confirm_delivery makes basic_publish wait for broker confirmation.
+    uncommitted = 0
+    try:
+        for index, record in enumerate(parser(download(bucket, key, client=client))):
+            channel.basic_publish(
+                exchange="",
+                routing_key=settings.output_queue,
+                body=json.dumps(
+                    record,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode(),
+                properties=pika.BasicProperties(
+                    delivery_mode=pika.DeliveryMode.Persistent,
+                    content_type="application/json",
+                    message_id=f"{bucket}:{key}:{index}",
+                    headers={"source_bucket": bucket, "source_key": key},
+                ),
+                mandatory=True,
+            )
+            count += 1
+            uncommitted += 1
+            if uncommitted == settings.publish_batch_size:
+                channel.tx_commit()
+                log.info("committed %d record(s) from %s", count, key)
+                uncommitted = 0
+
+        if uncommitted:
+            channel.tx_commit()
+            log.info("committed %d record(s) from %s", count, key)
+            uncommitted = 0
+    except Exception:
+        if uncommitted and channel.is_open:
+            try:
+                channel.tx_rollback()
+            except Exception:
+                log.exception("failed to roll back RabbitMQ transaction")
+        raise
+
+    # The object watermark advances only after every transaction has committed.
     checkpoint.save(key, timestamp)
     log.info("published %d record(s) from %s", count, key)
     return count
@@ -229,7 +258,9 @@ def run_once() -> dict[str, int]:
     try:
         channel = connection.channel()
         channel.queue_declare(queue=settings.output_queue, durable=True)
-        channel.confirm_delivery()
+        # Transactions batch durable-publish acknowledgements into one network
+        # round trip instead of waiting for a publisher confirm per record.
+        channel.tx_select()
         return poll_once(channel, settings, client)
     finally:
         if connection.is_open:
