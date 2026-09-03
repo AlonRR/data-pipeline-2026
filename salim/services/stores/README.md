@@ -216,26 +216,83 @@ not null** — `latitude`/`longitude` 519/1001, `branchPhone` 564/1001,
 `branchAddress` 637/1001, `city` 772/1001. Any parser that trusts truthiness will
 happily store `"undefined"` as a coordinate.
 
-### Measured end to end — 2 Sept 2026
+### Measured end to end — 3 Sept 2026
 
-Full run against local Postgres, `docker compose run --rm stores`, counted from
-the `stores` table rather than from the run summary:
+Full run against a freshly created database (`docker compose down -v` first, so
+this also proves `create_all` builds the right schema from nothing), counted
+from `branches` and `branch_opening_hours` rather than from the run summary.
 
-| provider | branches | phone | coords | hours | city |
-|---|---|---|---|---|---|
-| shufersal | 416 | 308 | 316 | **0** | 320 |
-| yohananof | 50 | **0** | 27 | 27 | 15 |
-| rami_levi | 98 | 53 | **0** | 54 | 56 |
-| hazi_hinam | 12 | 11 | 11 | 5 | 9 |
-| **total** | **576** | 372 | 354 | 86 | 400 |
+**576 branches, 389 enriched uniquely + 25 with address-only data, 525 opening-hour rows.**
 
-**Two of the zeroes are permanent, and #23's DoD cannot be fully met because of
-them.** The issue asks for `phone` and `openningTimeFrame (from, to)` for all
-four chains. Yochananof's API carries no phone field, and Shufersal's Wix
-collection carries no opening hours — not empty values, no such field. Those
-would need a different source per chain (Google Places or the branch pages
-themselves), which is a separate piece of work, not a fix to these enrichers.
+| chain | branches | phone | coords | city | hours | the source does not provide |
+|---|---|---|---|---|---|---|
+| שופרסל | 416 | 308 | 315 | 320 | — | **opening_hours** |
+| רמי לוי | 98 | 53 | — | 56 | 333 rows | **latitude, longitude** |
+| יוחננוף | 50 | — | 27 | 15 | 162 rows | **phone** |
+| חצי חינם | 12 | 11 | 11 | 9 | 30 rows | *nothing — the only complete one* |
 
-Shufersal's 457 unmatched locator records are expected rather than a defect:
-the collection covers 791 retail branches across many sub-brands, while the
-mandated file lists the 416 that publish prices.
+A dash is **not a scrape that failed**. Those sources carry no such field at
+all, and each row records that in `branches.fields_not_provided`, so a null
+column can be told apart from one nobody has looked up yet:
+
+| what is true | how the row shows it |
+|---|---|
+| nobody has looked this branch up | `enriched_at IS NULL` |
+| the source has no such field | field listed in `fields_not_provided` |
+| the source has the field, blank here | enriched, not listed, column still null |
+
+The declarations behind that column are measured against live responses, not
+read off documentation — see `provides` on each enricher.
+
+#### Why hours are normalized
+
+`branch_opening_hours` holds one row per branch per weekday, ISO-numbered
+(Monday 1 … Sunday 7). A real Yochananof week, straight from the table:
+
+```
+ weekday | opens_at | closes_at
+       1 | 07:30    | 21:00
+       2 | 07:30    | 22:00
+       3 | 07:30    | 22:30
+       4 | 07:30    | 23:00
+       5 | 06:00    | 13:30     <- short Friday
+       7 | 07:30    | 21:00
+                               <- weekday 6 absent: closed Saturday
+```
+
+A single `from`/`to` pair cannot express that. #28's `flatten_hours` took the
+widest window across Sunday–Thursday, which for this branch stores
+`07:30–23:00` and claims it is open on Friday evening and all day Saturday.
+
+Two things the live data corrected, found by running the conversion over all
+four locators rather than reasoning about it:
+
+- **"Open until midnight" is spelled both `00:00` and `24:00`** — one Rami Levi
+  branch uses each on different days of the same week. `24:00` is not a valid
+  time and `00:00` read literally sorts before every opening time, so both are
+  recognised before parsing and stored as `23:59:59`.
+- **An inverted window skips its day rather than failing the branch.** Two Rami
+  Levi branches publish a Friday as `13:30–06:30`, from and to swapped at the
+  source. One unusable day is not an unusable branch.
+
+### Applying this to a database that already has `branches`
+
+`create_all()` creates missing tables; it does **not** add columns to a table
+that already exists. A database where the loader has already created `branches`
+needs these before this service can write to it — otherwise the first insert
+naming `phone` fails with `column does not exist`:
+
+```sql
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone VARCHAR(64);
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS city_code VARCHAR(16);
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS store_type VARCHAR(8);
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS source_file VARCHAR(256);
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS enrichment_source VARCHAR(128);
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS enrichment_match VARCHAR(16);
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS fields_not_provided JSONB;
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP WITH TIME ZONE;
+```
+
+That is what issue #35 needs against Supabase before its first run.
