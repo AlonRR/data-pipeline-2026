@@ -7,12 +7,13 @@ live database is a manual job (see README).
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from shared.models import Base
 
@@ -82,3 +83,20 @@ def init_db(engine: Engine) -> None:
             if table.schema:
                 table_name = f"{preparer.quote_schema(table.schema)}.{table_name}"
             connection.exec_driver_sql(f"ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY")
+
+
+_api_session_factory: sessionmaker | None = None
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Provide one database session per API request."""
+    global _api_session_factory
+
+    if _api_session_factory is None:
+        _api_session_factory = make_session_factory(make_engine())
+
+    session = _api_session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
