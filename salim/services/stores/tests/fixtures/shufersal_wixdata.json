@@ -1,0 +1,109 @@
+{
+ "dataItems": [
+  {
+   "id": "68b2fb58-dd7d-4a74-b7f1-4869746bb778",
+   "dataCollectionId": "Branches",
+   "data": {
+    "cityCode": 8600.0,
+    "city": "רמת גן",
+    "area": 98.0,
+    "lastUpdate": "2026-09-02T02:06:59.849Z",
+    "latitude": "32.0661423",
+    "_id": "68b2fb58-dd7d-4a74-b7f1-4869746bb778",
+    "_owner": "1a0f07d8-5931-4a64-ada2-cb1e4e6e3a06",
+    "_createdDate": {
+     "$date": "2025-06-11T09:59:57.268Z"
+    },
+    "companyNetworkId": 1.0,
+    "_updatedDate": {
+     "$date": "2026-09-02T02:07:00.048Z"
+    },
+    "longitude": "34.8265724",
+    "branchId": 160.0,
+    "branchAddress": "הירדן 29",
+    "branchPhone": "03-5742712",
+    "companyNetwork": "שופרסל שלי",
+    "isActive": "0",
+    "branchName": "שלי רמת גן- הירדן"
+   }
+  },
+  {
+   "id": "58458854-5ebd-416d-8348-7d4fd69adcaf",
+   "dataCollectionId": "Branches",
+   "data": {
+    "city": "",
+    "area": 98.0,
+    "lastUpdate": "2026-09-02T02:08:34.342Z",
+    "latitude": "undefined",
+    "_id": "58458854-5ebd-416d-8348-7d4fd69adcaf",
+    "_owner": "1a0f07d8-5931-4a64-ada2-cb1e4e6e3a06",
+    "_createdDate": {
+     "$date": "2026-09-02T02:06:51.892Z"
+    },
+    "companyNetworkId": 2.0,
+    "_updatedDate": {
+     "$date": "2026-09-02T02:08:34.481Z"
+    },
+    "longitude": "undefined",
+    "branchId": 944.0,
+    "branchAddress": "",
+    "branchPhone": "",
+    "companyNetwork": "שופרסל דיל",
+    "isActive": "1",
+    "branchName": "אפליקציית מובייל"
+   }
+  },
+  {
+   "id": "923a35e0-ae07-4908-90d3-1bfd92bc8e93",
+   "dataCollectionId": "Branches",
+   "data": {
+    "city": "",
+    "area": 0.0,
+    "lastUpdate": "2026-09-02T02:08:37.190Z",
+    "latitude": "undefined",
+    "_id": "923a35e0-ae07-4908-90d3-1bfd92bc8e93",
+    "_owner": "1a0f07d8-5931-4a64-ada2-cb1e4e6e3a06",
+    "_createdDate": {
+     "$date": "2026-09-02T02:07:12.590Z"
+    },
+    "companyNetworkId": 9.0,
+    "_updatedDate": {
+     "$date": "2026-09-02T02:08:37.331Z"
+    },
+    "longitude": "undefined",
+    "branchId": 999.0,
+    "branchAddress": "",
+    "branchPhone": "",
+    "companyNetwork": "מחסנים",
+    "isActive": "1",
+    "branchName": "סניף עתידי \" רימה \""
+   }
+  },
+  {
+   "id": "4a28a33b-002c-4d84-a121-c506b7512f24",
+   "dataCollectionId": "Branches",
+   "data": {
+    "city": "0",
+    "area": 98.0,
+    "lastUpdate": "2026-09-02T02:08:23.856Z",
+    "latitude": "31.7804666",
+    "_id": "4a28a33b-002c-4d84-a121-c506b7512f24",
+    "_owner": "1a0f07d8-5931-4a64-ada2-cb1e4e6e3a06",
+    "_createdDate": {
+     "$date": "2026-09-02T02:05:18.110Z"
+    },
+    "companyNetworkId": 5.0,
+    "_updatedDate": {
+     "$date": "2026-09-02T02:08:24Z"
+    },
+    "longitude": "35.2158592",
+    "branchId": 690.0,
+    "branchAddress": "סניף נסגר",
+    "branchPhone": "0",
+    "companyNetwork": "Be",
+    "isActive": "1",
+    "branchName": "Be  מדיקל אורה"
+   }
+  }
+ ]
+}

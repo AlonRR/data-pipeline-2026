@@ -1,0 +1,95 @@
+{
+ "data": {
+  "externalStores": [
+   {
+    "storeNumber": 1,
+    "storeName": "רחובות - מפוח",
+    "address": "המפוח 11, א.ת רחובות",
+    "customerServicePhone": null,
+    "locationMapUrl": "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d13550.951856998567!2d34.780207!3d31.886541!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x151d009d5c2552b1%3A0xe2e9f547e251dc25!2z15nXldeX16DXoNeV16Mg16jXl9eV15HXldeqIC0g15TXntek15XXlw!5e0!3m2!1siw!2sil!4v1667225239567!5m2!1siw!2sil",
+    "openingHours": {
+     "defaultByWeekday": [
+      {
+       "weekday": 0,
+       "standard": [
+        {
+         "from": 450,
+         "to": 1260
+        }
+       ],
+       "daylightSaving": null
+      },
+      {
+       "weekday": 1,
+       "standard": [
+        {
+         "from": 450,
+         "to": 1260
+        }
+       ],
+       "daylightSaving": null
+      },
+      {
+       "weekday": 2,
+       "standard": [
+        {
+         "from": 450,
+         "to": 1320
+        }
+       ],
+       "daylightSaving": null
+      },
+      {
+       "weekday": 3,
+       "standard": [
+        {
+         "from": 450,
+         "to": 1350
+        }
+       ],
+       "daylightSaving": null
+      },
+      {
+       "weekday": 4,
+       "standard": [
+        {
+         "from": 450,
+         "to": 1380
+        }
+       ],
+       "daylightSaving": null
+      },
+      {
+       "weekday": 5,
+       "standard": [
+        {
+         "from": 360,
+         "to": 810
+        }
+       ],
+       "daylightSaving": [
+        {
+         "from": 360,
+         "to": 900
+        }
+       ]
+      },
+      {
+       "weekday": 6,
+       "standard": [],
+       "daylightSaving": null
+      }
+     ]
+    }
+   },
+   {
+    "storeNumber": 57,
+    "storeName": "יהוד",
+    "address": "יהוד",
+    "customerServicePhone": null,
+    "locationMapUrl": null,
+    "openingHours": null
+   }
+  ]
+ }
+}

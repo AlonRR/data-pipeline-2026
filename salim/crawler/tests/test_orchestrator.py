@@ -166,3 +166,76 @@ class OrchestratorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelectedCrawlersTests(unittest.TestCase):
+    """``CRAWLER_PROVIDERS`` picks which chains a given runner attempts.
+
+    Three of the eight sources refuse GitHub's datacenter IP ranges, so the
+    hosted schedule has to skip them while a runner on an Israeli IP still runs
+    all eight. Which chains are reachable is therefore a property of the
+    *runner*, not of the code — which is why this is an environment variable
+    and not an edit to ``CRAWLERS``. Deleting them from the list would break
+    the only place they currently work.
+    """
+
+    def setUp(self) -> None:
+        _RecordingCrawler.instances.clear()
+
+    def _infra(self) -> InfraConfig:
+        tmpdir = Path(tempfile.mkdtemp())
+        return InfraConfig(
+            bucket="raw-prices",
+            s3_endpoint=None,
+            s3_access_key=None,
+            s3_secret_key=None,
+            s3_region=None,
+            download_dir=tmpdir / "downloads",
+        )
+
+    def _names(self, crawlers) -> list[str]:
+        return [orchestrator._registration_for(c).name for c in crawlers]
+
+    def test_unset_runs_every_registered_crawler(self):
+        """The default has to stay "all": a self-hosted runner sets nothing,
+        and a chain must never become uncollected by omission."""
+        environ = {k: v for k, v in os.environ.items() if k != "CRAWLER_PROVIDERS"}
+        with patch.dict(os.environ, environ, clear=True):
+            self.assertEqual(self._names(orchestrator.selected_crawlers()),
+                             self._names(orchestrator.CRAWLERS))
+
+    def test_empty_value_is_treated_as_unset(self):
+        """An unset GitHub Actions variable renders as the empty string rather
+        than being absent, so "" has to mean all, not none."""
+        with patch.dict(os.environ, {"CRAWLER_PROVIDERS": "  "}, clear=False):
+            self.assertEqual(self._names(orchestrator.selected_crawlers()),
+                             self._names(orchestrator.CRAWLERS))
+
+    def test_a_list_selects_those_crawlers_in_registration_order(self):
+        with patch.dict(os.environ, {"CRAWLER_PROVIDERS": "wolt, yohananof"}, clear=False):
+            self.assertEqual(self._names(orchestrator.selected_crawlers()),
+                             ["yohananof", "wolt"])
+
+    def test_blank_entries_are_ignored(self):
+        with patch.dict(os.environ, {"CRAWLER_PROVIDERS": " wolt , , "}, clear=False):
+            self.assertEqual(self._names(orchestrator.selected_crawlers()), ["wolt"])
+
+    def test_an_unknown_name_fails_loudly_rather_than_silently_skipping(self):
+        """A typo that quietly drops a chain is the exit-0 problem again: the
+        job stays green while one source simply stops being collected."""
+        with patch.dict(os.environ, {"CRAWLER_PROVIDERS": "wolt,shufresal"}, clear=False):
+            with self.assertRaises(ValueError) as ctx:
+                orchestrator.selected_crawlers()
+        self.assertIn("shufresal", str(ctx.exception))
+
+    def test_run_honours_the_selection(self):
+        registrations = [
+            orchestrator.CrawlerRegistration(name="yohananof", crawler_cls=_RecordingCrawler),
+            orchestrator.CrawlerRegistration(name="rami_levi", crawler_cls=_RecordingCrawler),
+        ]
+        with patch.object(orchestrator, "CRAWLERS", registrations), \
+             patch.object(orchestrator, "load_infra_config", return_value=self._infra()), \
+             patch.dict(os.environ, {"CRAWLER_PROVIDERS": "rami_levi"}, clear=False):
+            results = orchestrator.run()
+
+        self.assertEqual(list(results), ["rami_levi"])

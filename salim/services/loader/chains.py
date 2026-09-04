@@ -1,18 +1,10 @@
-"""ChainId -> display name, seeded into ``chains`` at startup (insert-if-missing).
+"""Re-export of the shared chain registry.
 
-Values are the ``ChainId`` each chain writes into its price-transparency
-files. Victory publishes under two ids. A chain missing here still loads
-fine (``provider`` is not a foreign key); it just has no name until a row is
-added.
+The registry moved to ``shared/chains.py`` when the stores service needed it
+too: ``branches.chain_id`` is a foreign key to ``chains``, so that service has
+to seed the same rows, and ``chains.name`` is NOT NULL with
+``on_conflict_do_nothing`` — whichever service runs first sets the display
+name. Two copies would mean a run order that decides whether the name reads
+"שופרסל" or "shufersal".
 """
-
-CHAINS: dict[str, str] = {
-    "7290027600007": "שופרסל",
-    "7290058140886": "רמי לוי",
-    "7290803800003": "יוחננוף",
-    "7290696200003": "ויקטורי",
-    "7290058103393": "ויקטורי",
-    "7290700100008": "חצי חינם",
-    "7290873255550": "טיב טעם",
-    "7290172900007": "סופר פארם",
-}
+from shared.chains import CHAINS  # noqa: F401
