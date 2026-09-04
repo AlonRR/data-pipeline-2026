@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from api.main import app, get_store, list_stores
 from api.deps import get_session
 from api.tests.support import PostgresTestCase
-from shared.models import Branch, Chain
+from shared.models import Branch, BranchOpeningException, BranchOpeningHour, Chain
 
 
 def seed_stores(session) -> None:
@@ -30,6 +30,16 @@ def seed_stores(session) -> None:
                 timezone="Asia/Jerusalem",
                 is_active=True,
                 metadata_updated_at=datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc),
+                phone="09-5555555",
+                city_code="9700",
+                store_type="1",
+                source_file="Stores7290027600007-000.xml",
+                enrichment_source="7290027600007:locator-1",
+                enrichment_match="unique",
+                enriched_at=datetime(2026, 9, 2, 9, 0, tzinfo=timezone.utc),
+                fields_not_provided=[],
+                first_seen_at=datetime(2026, 8, 30, 9, 0, tzinfo=timezone.utc),
+                last_seen_at=datetime(2026, 9, 2, 9, 0, tzinfo=timezone.utc),
             ),
             Branch(
                 chain_id="7290027600007",
@@ -56,6 +66,27 @@ def seed_stores(session) -> None:
                 metadata_updated_at=datetime(2026, 9, 2, 8, 30, tzinfo=timezone.utc),
             ),
         ]
+    )
+    session.flush()
+    session.add(
+        BranchOpeningHour(
+            chain_id="7290027600007",
+            branch_id="001",
+            weekday=1,
+            interval_index=0,
+            opens_at=time(7, 30),
+            closes_at=time(21, 0),
+        )
+    )
+    session.add(
+        BranchOpeningException(
+            chain_id="7290027600007",
+            branch_id="001",
+            date=date(2026, 9, 23),
+            interval_index=0,
+            is_closed=True,
+            reason="holiday",
+        )
     )
     session.commit()
 
@@ -145,7 +176,26 @@ class StoreRoutesTest(PostgresTestCase):
         response = self.client.get("/stores/7290027600007")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([branch["branch_id"] for branch in response.json()["branches"]], ["001", "002"])
+        branches = response.json()["branches"]
+        self.assertEqual([branch["branch_id"] for branch in branches], ["001", "002"])
+        self.assertEqual(branches[0]["phone"], "09-5555555")
+        self.assertEqual(branches[0]["city_code"], "9700")
+        self.assertEqual(branches[0]["enrichment_match"], "unique")
+        self.assertEqual(
+            branches[0]["opening_hours"],
+            [{"weekday": 1, "interval_index": 0, "opens_at": "07:30:00", "closes_at": "21:00:00"}],
+        )
+        self.assertEqual(
+            branches[0]["opening_exceptions"],
+            [{
+                "date": "2026-09-23",
+                "interval_index": 0,
+                "is_closed": True,
+                "opens_at": None,
+                "closes_at": None,
+                "reason": "holiday",
+            }],
+        )
 
     def test_get_store_http_returns_json_404(self):
         response = self.client.get("/stores/missing-store")

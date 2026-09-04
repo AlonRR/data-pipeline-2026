@@ -1,10 +1,30 @@
 # Pydantic response models for the API endpoints.
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class OpeningHourOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    weekday: int
+    interval_index: int
+    opens_at: time
+    closes_at: time
+
+
+class OpeningExceptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    interval_index: int
+    is_closed: bool
+    opens_at: time | None
+    closes_at: time | None
+    reason: str | None
 
 
 class BranchOut(BaseModel):
@@ -20,6 +40,18 @@ class BranchOut(BaseModel):
     timezone: str
     is_active: bool
     metadata_updated_at: datetime | None
+    phone: str | None
+    city_code: str | None
+    store_type: str | None
+    source_file: str | None
+    enrichment_source: str | None
+    enrichment_match: str | None
+    enriched_at: datetime | None
+    fields_not_provided: list[str] | None
+    first_seen_at: datetime | None
+    last_seen_at: datetime | None
+    opening_hours: list[OpeningHourOut] = Field(default_factory=list)
+    opening_exceptions: list[OpeningExceptionOut] = Field(default_factory=list)
 
 
 class StoreOut(BaseModel):
