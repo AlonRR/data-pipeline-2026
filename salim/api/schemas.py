@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OpeningHourOut(BaseModel):
@@ -50,8 +50,8 @@ class BranchOut(BaseModel):
     fields_not_provided: list[str] | None
     first_seen_at: datetime | None
     last_seen_at: datetime | None
-    opening_hours: list[OpeningHourOut] = []
-    opening_exceptions: list[OpeningExceptionOut] = []
+    opening_hours: list[OpeningHourOut] = Field(default_factory=list)
+    opening_exceptions: list[OpeningExceptionOut] = Field(default_factory=list)
 
 
 class StoreOut(BaseModel):
