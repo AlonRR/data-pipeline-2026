@@ -56,3 +56,18 @@ jobs:
           S3_SECRET_KEY: ${{ secrets.SUPABASE_ACCESS_SECRET_KEY }}
           S3_BUCKET: ${{ secrets.S3_BUCKET || 'SalimPrices' }}
           S3_REGION: ${{ secrets.S3_REGION || 'eu-central-1' }}
+          # hazi_hinam, victory and super_pharm refuse GitHub's datacenter IP
+          # ranges — a 403, dropped packets, and a page that parses to zero
+          # links while reporting success. The same commit collects all three
+          # from an Israeli IP, so this is a property of the runner, not a bug
+          # in the crawlers, and it is not fixable in crawler code.
+          #
+          # Hosted runners therefore attempt only the five that are reachable.
+          # A self-hosted runner gets the empty default and runs all eight, so
+          # this must not become a hardcoded list. Set the CRAWLER_PROVIDERS
+          # repository variable to override either way.
+          CRAWLER_PROVIDERS: >-
+            ${{ vars.CRAWLER_PROVIDERS
+                || (runner.environment == 'github-hosted'
+                    && 'yohananof,rami_levi,tiv_taam,shufersal,wolt'
+                    || '') }}
