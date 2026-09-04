@@ -113,6 +113,18 @@ class Branch(Base):
     __table_args__ = (ForeignKeyConstraint(["chain_id"], ["chains.chain_id"]),)
 
     chain = relationship("Chain", back_populates="branches")
+    opening_hours = relationship(
+        "BranchOpeningHour",
+        back_populates="branch",
+        order_by="(BranchOpeningHour.weekday, BranchOpeningHour.interval_index)",
+        cascade="all, delete-orphan",
+    )
+    opening_exceptions = relationship(
+        "BranchOpeningException",
+        back_populates="branch",
+        order_by="(BranchOpeningException.date, BranchOpeningException.interval_index)",
+        cascade="all, delete-orphan",
+    )
 
 
 class BranchOpeningHour(Base):
@@ -128,6 +140,8 @@ class BranchOpeningHour(Base):
     __table_args__ = (
         ForeignKeyConstraint(["chain_id", "branch_id"], ["branches.chain_id", "branches.branch_id"], ondelete="CASCADE"),
     )
+
+    branch = relationship("Branch", back_populates="opening_hours")
 
 
 class BranchOpeningException(Base):
@@ -145,6 +159,8 @@ class BranchOpeningException(Base):
     __table_args__ = (
         ForeignKeyConstraint(["chain_id", "branch_id"], ["branches.chain_id", "branches.branch_id"], ondelete="CASCADE"),
     )
+
+    branch = relationship("Branch", back_populates="opening_exceptions")
 
 
 class CatalogProduct(Base):
