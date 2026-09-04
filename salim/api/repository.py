@@ -1,4 +1,4 @@
-"""Read queries backing the /products API surface.
+"""Read queries backing the API surface.
 
 Everything here is a plain read: no writes, no schema management (that is
 the loader's job -- see services/loader/repository.py). ``product_id`` is
@@ -11,14 +11,87 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from shared.models import CatalogProduct, Chain, Price, Product, Promotion, PromotionItem
+from shared.models import Branch, CatalogProduct, Chain, Price, Product, Promotion, PromotionItem
 
 DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 200
 DEFAULT_PRICE_LIMIT = 10
 MAX_PRICE_LIMIT = 50
+DEFAULT_STORE_LIMIT = 50
+MAX_STORE_LIMIT = 100
+
+
+def list_stores(
+    session: Session,
+    *,
+    chain_id: str | None = None,
+    slug: str | None = None,
+    name: str | None = None,
+    city: str | None = None,
+    branch_name: str | None = None,
+    is_active: bool | None = None,
+    limit: int = DEFAULT_STORE_LIMIT,
+    offset: int = 0,
+) -> dict[str, Any]:
+    filters = []
+    needs_branch_join = False
+
+    if chain_id:
+        filters.append(Chain.chain_id == chain_id)
+    if slug:
+        filters.append(Chain.slug == slug)
+    if name:
+        filters.append(Chain.name.ilike(f"%{name}%"))
+    if city:
+        filters.append(Branch.city.ilike(f"%{city}%"))
+        needs_branch_join = True
+    if branch_name:
+        filters.append(Branch.name.ilike(f"%{branch_name}%"))
+        needs_branch_join = True
+    if is_active is not None:
+        filters.append(Branch.is_active == is_active)
+        needs_branch_join = True
+
+    items_stmt = select(Chain)
+    if needs_branch_join:
+        items_stmt = items_stmt.join(Branch, Branch.chain_id == Chain.chain_id)
+    if filters:
+        items_stmt = items_stmt.where(*filters)
+    items_stmt = (
+        items_stmt.distinct()
+        .order_by(Chain.name.asc(), Chain.chain_id.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    if needs_branch_join:
+        total_stmt = (
+            select(func.count(func.distinct(Chain.chain_id)))
+            .select_from(Chain)
+            .join(Branch, Branch.chain_id == Chain.chain_id)
+        )
+    else:
+        total_stmt = select(func.count()).select_from(Chain)
+    if filters:
+        total_stmt = total_stmt.where(*filters)
+
+    return {
+        "items": list(session.execute(items_stmt).scalars().all()),
+        "total": session.scalar(total_stmt) or 0,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def get_store(session: Session, store_id: str) -> Chain | None:
+    stmt = (
+        select(Chain)
+        .options(selectinload(Chain.branches))
+        .where(Chain.chain_id == store_id)
+    )
+    return session.execute(stmt).scalar_one_or_none()
 
 
 def list_products(

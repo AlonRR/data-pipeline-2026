@@ -24,7 +24,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -39,6 +39,8 @@ class Chain(Base):
     chain_id = Column(String(32), primary_key=True)
     name = Column(String(64), nullable=False)
     slug = Column(String(64), unique=True)
+
+    branches = relationship("Branch", back_populates="chain", order_by="Branch.branch_id")
 
 
 class Branch(Base):
@@ -109,6 +111,8 @@ class Branch(Base):
     last_seen_at = Column(DateTime(timezone=True))
 
     __table_args__ = (ForeignKeyConstraint(["chain_id"], ["chains.chain_id"]),)
+
+    chain = relationship("Chain", back_populates="branches")
 
 
 class BranchOpeningHour(Base):
