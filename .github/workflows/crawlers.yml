@@ -34,7 +34,7 @@ jobs:
               exit 1
               ;;
           esac
-          echo "S3 endpoint host: $(printf '%s' "$S3_ENDPOINT_URL" | sed -E 's#^(https?://[^/]+).*#\\1#')"
+          echo "S3 endpoint host: $(printf '%s' "$S3_ENDPOINT_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
 
       - name: Check Python is new enough
         run: |
