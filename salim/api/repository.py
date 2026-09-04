@@ -88,7 +88,10 @@ def list_stores(
 def get_store(session: Session, store_id: str) -> Chain | None:
     stmt = (
         select(Chain)
-        .options(selectinload(Chain.branches))
+        .options(
+            selectinload(Chain.branches).selectinload(Branch.opening_hours),
+            selectinload(Chain.branches).selectinload(Branch.opening_exceptions),
+        )
         .where(Chain.chain_id == store_id)
     )
     return session.execute(stmt).scalar_one_or_none()
