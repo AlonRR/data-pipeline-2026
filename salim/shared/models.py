@@ -23,6 +23,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -41,7 +42,25 @@ class Chain(Base):
 
 
 class Branch(Base):
-    """Store metadata owned by a separate metadata pipeline, never by prices-q."""
+    """Store metadata owned by a separate metadata pipeline, never by prices-q.
+
+    That pipeline is ``services/stores``, and its rows come from two kinds of
+    source, which is why so much here is nullable:
+
+    - The chain's mandated ``Stores`` publication (price-transparency law)
+      supplies ``branch_id``, ``name``, ``address``, ``city_code`` and
+      ``store_type``. It carries **no phone, no coordinates and no opening
+      hours**, and its ``City`` is a CBS municipality code rather than a name —
+      hence ``city_code`` here and ``city`` from the locator.
+    - The chain's own branch locator supplies ``phone``, ``city`` and, where
+      published, ``latitude`` / ``longitude``. Opening hours live in
+      ``branch_opening_hours`` rather than on this row.
+
+    A row therefore appears as soon as the Stores file lists it and fills in
+    over time as the locator scrape reaches it, so a null ``phone`` is
+    ambiguous on its own — ``enriched_at`` and ``enrichment_match`` are what
+    separate "looked up and absent" from "never looked up".
+    """
 
     __tablename__ = "branches"
 
@@ -55,6 +74,39 @@ class Branch(Base):
     timezone = Column(String(64), nullable=False, server_default=text("'Asia/Jerusalem'"))
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
     metadata_updated_at = Column(DateTime(timezone=True))
+
+    # --- from the chain's own branch locator --- #
+    phone = Column(String(64))
+
+    # --- from the Stores file, beyond identity --- #
+    # CBS municipality code, NOT a city name. Shufersal publishes 420 of 420
+    # rows as a code, so an address rendered from this alone is a bare street.
+    city_code = Column(String(16))
+    store_type = Column(String(8))
+
+    # --- provenance --- #
+    source_file = Column(String(256))
+    # "<provider>:<locator id>" — the locator's own id, kept for tracing only.
+    # It does not correspond to branch_id and must never be used to join.
+    enrichment_source = Column(String(128))
+    # "unique" | "ambiguous" — several branches can share one locator record
+    # when a chain runs more than one business at an address. Address-intrinsic
+    # facts still hold for those; opening hours do not.
+    enrichment_match = Column(String(16))
+    enriched_at = Column(DateTime(timezone=True))
+    # Fields this chain's locator does not publish at all, e.g. ["phone"] for
+    # Yochananof or ["opening_hours"] for Shufersal. Without it a null column
+    # means three different things at once: the source carries no such field,
+    # the source carries it but this branch is blank, or nobody has looked the
+    # branch up. `enriched_at` separates the third; this separates the first.
+    fields_not_provided = Column(JSONB)
+
+    # --- lifecycle --- #
+    # Derived from presence in the newest Stores file: a branch that stops
+    # being listed is flagged inactive rather than deleted, so price rows that
+    # reference it keep resolving.
+    first_seen_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True))
 
     __table_args__ = (ForeignKeyConstraint(["chain_id"], ["chains.chain_id"]),)
 
